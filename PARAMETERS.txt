@@ -1,0 +1,351 @@
+校园气候监测后端参数说明
+========================================
+
+一、服务概览
+----------------------------------------
+服务名称：Campus Weather Monitor API
+默认监听端口：8000
+API 文档：/docs
+OpenAPI 描述：/openapi.json
+健康检查：GET /health
+
+测量数据接口前缀：/api/v1
+数据格式：HTTP JSON，请求头 Content-Type 必须为 application/json。
+时间格式：ISO 8601。允许省略 observed_at，省略时使用服务器接收时间。
+时间时区：提交 observed_at 时必须携带时区，例如 +08:00 或 Z。
+数据存储：所有采集时间统一转换为 UTC。
+站点标识：station_id 用于区分不同监测站，最长 64 个字符，不能为空白。
+
+二、上报测量数据
+----------------------------------------
+请求方法：POST
+请求路径：/api/v1/measurements
+成功状态码：201 Created
+
+请求字段：
+
+1. station_id
+   类型：string
+   是否必填：是
+   长度：1-64 个字符
+   说明：监测站唯一标识，前后空白会自动去除。
+   示例：station-01
+
+2. observed_at
+   类型：ISO 8601 string
+   是否必填：否
+   默认值：服务器当前接收时间
+   说明：传感器采集时间，必须携带时区。
+   示例：2026-10-29T08:30:00+08:00
+
+3. wind_speed
+   类型：number
+   是否必填：是
+   单位：m/s
+   范围：0-100
+   说明：风速。
+   示例：2.8
+
+4. wind_direction
+   类型：number
+   是否必填：是
+   单位：度（°）
+   范围：0-360
+   说明：风向角度。0° 为正北，90° 为正东，180° 为正南，270° 为正西。
+   示例：135
+
+5. temperature
+   类型：number
+   是否必填：是
+   单位：摄氏度（°C）
+   范围：-100 至 100
+   说明：空气温度。
+   示例：21.6
+
+6. humidity
+   类型：number
+   是否必填：是
+   单位：百分比（%）
+   范围：0-100
+   说明：相对湿度。
+   示例：63
+
+7. co2
+   类型：number
+   是否必填：是
+   单位：ppm
+   范围：0-100000
+   说明：二氧化碳浓度。
+   示例：418
+
+8. pm25
+   类型：number
+   是否必填：是
+   单位：微克每立方米（μg/m³）
+   范围：0-10000
+   说明：PM2.5 颗粒物浓度。
+   示例：18
+
+9. pm10
+   类型：number
+   是否必填：是
+   单位：微克每立方米（μg/m³）
+   范围：0-10000
+   说明：PM10 颗粒物浓度。
+   示例：34
+
+请求示例：
+
+{
+  "station_id": "station-01",
+  "observed_at": "2026-10-29T08:30:00+08:00",
+  "wind_speed": 2.8,
+  "wind_direction": 135,
+  "temperature": 21.6,
+  "humidity": 63,
+  "co2": 418,
+  "pm25": 18,
+  "pm10": 34
+}
+
+响应字段：
+
+id
+  类型：integer
+  说明：数据库记录编号。
+
+received_at
+  类型：ISO 8601 string
+  说明：服务器接收并保存数据的时间，响应中统一为 UTC。
+
+其余字段与请求字段一致。observed_at 响应值统一为 UTC。
+
+响应示例：
+
+{
+  "station_id": "station-01",
+  "observed_at": "2026-10-29T00:30:00Z",
+  "wind_speed": 2.8,
+  "wind_direction": 135.0,
+  "temperature": 21.6,
+  "humidity": 63.0,
+  "co2": 418.0,
+  "pm25": 18.0,
+  "pm10": 34.0,
+  "id": 1,
+  "received_at": "2026-10-29T00:30:02.123456Z"
+}
+
+PowerShell 调用示例：
+
+$body = @{
+  station_id = "station-01"
+  observed_at = "2026-10-29T08:30:00+08:00"
+  wind_speed = 2.8
+  wind_direction = 135
+  temperature = 21.6
+  humidity = 63
+  co2 = 418
+  pm25 = 18
+  pm10 = 34
+} | ConvertTo-Json
+
+Invoke-RestMethod `
+  -Method Post `
+  -Uri "http://127.0.0.1:8000/api/v1/measurements" `
+  -ContentType "application/json" `
+  -Body $body
+
+三、查询历史数据
+----------------------------------------
+请求方法：GET
+请求路径：/api/v1/measurements
+成功状态码：200 OK
+返回类型：JSON 数组，按 observed_at 倒序排列，同一时间按 id 倒序排列。
+
+查询参数：
+
+station_id
+  是否必填：否
+  类型：string
+  说明：按监测站筛选，不能为空白。
+
+start
+  是否必填：否
+  类型：ISO 8601 string
+  说明：采集时间下限，包含该时间点，必须携带时区。
+
+end
+  是否必填：否
+  类型：ISO 8601 string
+  说明：采集时间上限，包含该时间点，必须携带时区。
+
+offset
+  是否必填：否
+  类型：integer
+  默认值：0
+  最小值：0
+  说明：跳过的记录数。
+
+limit
+  是否必填：否
+  类型：integer
+  默认值：100
+  最小值：1
+  最大值：1000
+  说明：单次最多返回的记录数。
+
+组合查询示例：
+
+GET /api/v1/measurements?station_id=station-01&start=2026-10-29T00:00:00%2B08:00&end=2026-10-29T23:59:59%2B08:00&offset=0&limit=100
+
+约束：start 不能晚于 end。
+
+四、查询最新数据
+----------------------------------------
+请求方法：GET
+请求路径：/api/v1/measurements/latest
+成功状态码：200 OK
+
+查询参数：
+
+station_id
+  是否必填：否
+  类型：string
+  说明：指定站点时返回该站点 observed_at 最新的一条记录。
+            不指定时返回全部站点中 observed_at 最新的一条记录。
+
+示例：
+
+GET /api/v1/measurements/latest?station_id=station-01
+
+站点没有数据时返回 404 Not Found。
+
+五、健康检查
+----------------------------------------
+请求方法：GET
+请求路径：/health
+成功状态码：200 OK
+
+响应示例：
+
+{
+  "status": "ok"
+}
+
+该接口会执行一次数据库查询；数据库不可用时不会返回正常状态。
+
+六、状态码
+----------------------------------------
+200 OK
+  查询成功或健康检查成功。
+
+201 Created
+  测量数据保存成功。
+
+404 Not Found
+  查询最新数据时没有找到匹配记录。
+
+422 Unprocessable Entity
+  字段类型错误、数值越界、station_id 为空白、时间缺少时区，
+  或 start 晚于 end。
+
+500 Internal Server Error
+  数据库或其他服务端异常。
+
+七、数据库字段
+----------------------------------------
+表名：measurements
+
+id
+  类型：整数，主键，自增。
+
+station_id
+  类型：字符串，最大 64 字符，建立索引。
+
+observed_at
+  类型：带时区时间，建立索引。
+  说明：传感器采集时间，统一存为 UTC。
+
+received_at
+  类型：带时区时间。
+  说明：服务器接收时间，统一存为 UTC。
+
+wind_speed
+  类型：浮点数，单位 m/s。
+
+wind_direction
+  类型：浮点数，单位度。
+
+temperature
+  类型：浮点数，单位 °C。
+
+humidity
+  类型：浮点数，单位 %。
+
+co2
+  类型：浮点数，单位 ppm。
+
+pm25
+  类型：浮点数，单位 μg/m³。
+
+pm10
+  类型：浮点数，单位 μg/m³。
+
+组合索引：station_id + observed_at
+说明：用于提高站点历史数据的查询效率。
+
+八、环境变量
+----------------------------------------
+APP_NAME
+  默认值：Campus Weather Monitor API
+  说明：OpenAPI 页面显示的服务名称。
+
+DATABASE_URL
+  默认值：sqlite:///./data/weather.db
+  说明：数据库连接地址。
+  SQLite 示例：sqlite:///./data/weather.db
+  PostgreSQL 示例：
+  postgresql+psycopg://weather:weather@127.0.0.1:5432/weather
+
+CORS_ORIGINS
+  默认值：http://localhost:5173,http://127.0.0.1:5173
+  说明：允许跨域访问的前端地址，多个地址使用英文逗号分隔。
+  设置为 * 表示允许全部来源，仅建议用于受控开发环境。
+
+PORT
+  默认值：8000
+  说明：容器对外服务端口。
+
+WEB_CONCURRENCY
+  默认值：1
+  说明：Uvicorn 工作进程数。多实例或多进程部署建议使用 PostgreSQL。
+
+九、部署参数
+----------------------------------------
+本地开发：
+
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+
+容器单独运行：
+
+docker build -t campus-weather-api .
+docker run --rm -p 8000:8000 -v weather-data:/app/data campus-weather-api
+
+API 与 PostgreSQL 联合运行：
+
+docker compose up --build -d
+
+Compose 配置默认值：
+API 容器端口：8000
+数据库服务：db
+数据库端口：5432
+数据库名：weather
+数据库用户：weather
+数据库密码：weather
+持久化卷：weather-data
+
+生产环境必须使用独立强密码，限制 CORS_ORIGINS，并通过 HTTPS 反向代理访问。
