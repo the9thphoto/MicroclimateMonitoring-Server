@@ -73,3 +73,78 @@ def test_validation_rejects_invalid_values_and_naive_time(client):
     naive_time["observed_at"] = "2026-10-29T08:30:00"
     response = client.post("/api/v1/measurements", json=naive_time)
     assert response.status_code == 422
+
+
+def test_device_measurement_accepts_missing_optional_metrics(client):
+    payload = {
+        "station_id": "station-01",
+        "observed_at": "2026-11-04T08:00:00+08:00",
+        "temperature": -3.7,
+        "humidity": 49.3,
+    }
+
+    created = client.post("/api/v1/measurements", json=payload)
+
+    assert created.status_code == 201
+    body = created.json()
+    assert body["temperature"] == -3.7
+    assert body["humidity"] == 49.3
+    for field in ("wind_speed", "wind_direction", "co2", "pm25", "pm10"):
+        assert body[field] is None
+
+    latest = client.get(
+        "/api/v1/measurements/latest",
+        params={"station_id": "station-01"},
+    )
+    assert latest.status_code == 200
+    assert latest.json()["pm25"] is None
+
+
+def test_device_measurement_accepts_explicit_null_metrics(client):
+    payload = {
+        "station_id": "station-01",
+        "temperature": 21.6,
+        "humidity": 63,
+        "wind_speed": None,
+        "wind_direction": None,
+        "co2": None,
+        "pm25": None,
+        "pm10": None,
+    }
+
+    created = client.post("/api/v1/measurements", json=payload)
+
+    assert created.status_code == 201
+    body = created.json()
+    assert body["wind_speed"] is None
+    assert body["pm10"] is None
+
+
+def test_optional_metric_bounds_are_still_validated(client):
+    invalid_wind = sample_measurement()
+    invalid_wind["wind_speed"] = -1
+    assert client.post("/api/v1/measurements", json=invalid_wind).status_code == 422
+
+    invalid_pm = sample_measurement()
+    invalid_pm["pm10"] = 10_001
+    assert client.post("/api/v1/measurements", json=invalid_pm).status_code == 422
+
+    missing_temperature = sample_measurement()
+    missing_temperature.pop("temperature")
+    assert client.post("/api/v1/measurements", json=missing_temperature).status_code == 422
+
+    missing_humidity = sample_measurement()
+    missing_humidity.pop("humidity")
+    assert client.post("/api/v1/measurements", json=missing_humidity).status_code == 422
+
+
+def test_non_finite_float_returns_422_not_500(client):
+    response = client.post(
+        "/api/v1/measurements",
+        content=(
+            '{"station_id":"station-01","temperature":NaN,"humidity":63}'
+        ),
+        headers={"Content-Type": "application/json"},
+    )
+
+    assert response.status_code == 422

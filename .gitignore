@@ -3,5 +3,6 @@ __pycache__/
 .pytest_cache/
 .venv/
 .env
+docker-compose.yml
 data/
 tests/test_weather.db

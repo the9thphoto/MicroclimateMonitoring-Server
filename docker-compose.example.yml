@@ -1,3 +1,4 @@
+# Copy to docker-compose.yml (ignored by git) and adjust credentials and ports.
 services:
   api:
     build: .

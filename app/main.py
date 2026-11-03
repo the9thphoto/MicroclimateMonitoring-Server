@@ -1,8 +1,12 @@
+import math
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
-from fastapi import Depends, FastAPI, HTTPException, Query, status
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
@@ -33,12 +37,34 @@ app.add_middleware(
 )
 
 
+def _finite_json(value):
+    if isinstance(value, float) and not math.isfinite(value):
+        return str(value)
+    if isinstance(value, dict):
+        return {key: _finite_json(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_finite_json(item) for item in value]
+    return value
+
+
+@app.exception_handler(RequestValidationError)
+async def request_validation_exception_handler(
+    _: Request, exc: RequestValidationError
+) -> JSONResponse:
+    # Pydantic reports the offending input. A non-finite float is valid Python
+    # JSON to Starlette's parser but cannot be encoded back into a response.
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        content={"detail": _finite_json(jsonable_encoder(exc.errors()))},
+    )
+
+
 def _query_time(value: datetime | None, field_name: str) -> datetime | None:
     if value is None:
         return None
     if value.tzinfo is None or value.utcoffset() is None:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"{field_name} must include a timezone",
         )
     return value.astimezone(timezone.utc)
@@ -50,7 +76,7 @@ def _station_filter(value: str | None) -> str | None:
     station_id = value.strip()
     if not station_id:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="station_id must not be blank",
         )
     return station_id
@@ -100,7 +126,7 @@ def list_measurements(
     station = _station_filter(station_id)
     if start_utc and end_utc and start_utc > end_utc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="start must not be later than end",
         )
 

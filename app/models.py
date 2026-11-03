@@ -29,10 +29,10 @@ class Measurement(Base):
         default=utc_now,
     )
 
-    wind_speed: Mapped[float] = mapped_column(Float, nullable=False)
-    wind_direction: Mapped[float] = mapped_column(Float, nullable=False)
+    wind_speed: Mapped[float | None] = mapped_column(Float, nullable=True)
+    wind_direction: Mapped[float | None] = mapped_column(Float, nullable=True)
     temperature: Mapped[float] = mapped_column(Float, nullable=False)
     humidity: Mapped[float] = mapped_column(Float, nullable=False)
-    co2: Mapped[float] = mapped_column(Float, nullable=False)
-    pm25: Mapped[float] = mapped_column(Float, nullable=False)
-    pm10: Mapped[float] = mapped_column(Float, nullable=False)
+    co2: Mapped[float | None] = mapped_column(Float, nullable=True)
+    pm25: Mapped[float | None] = mapped_column(Float, nullable=True)
+    pm10: Mapped[float | None] = mapped_column(Float, nullable=True)

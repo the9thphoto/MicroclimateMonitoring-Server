@@ -6,13 +6,13 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 class MeasurementCreate(BaseModel):
     station_id: str = Field(min_length=1, max_length=64)
     observed_at: datetime | None = None
-    wind_speed: float = Field(ge=0, le=100, allow_inf_nan=False)
-    wind_direction: float = Field(ge=0, le=360, allow_inf_nan=False)
+    wind_speed: float | None = Field(default=None, ge=0, le=100, allow_inf_nan=False)
+    wind_direction: float | None = Field(default=None, ge=0, le=360, allow_inf_nan=False)
     temperature: float = Field(ge=-100, le=100, allow_inf_nan=False)
     humidity: float = Field(ge=0, le=100, allow_inf_nan=False)
-    co2: float = Field(ge=0, le=100_000, allow_inf_nan=False)
-    pm25: float = Field(ge=0, le=10_000, allow_inf_nan=False)
-    pm10: float = Field(ge=0, le=10_000, allow_inf_nan=False)
+    co2: float | None = Field(default=None, ge=0, le=100_000, allow_inf_nan=False)
+    pm25: float | None = Field(default=None, ge=0, le=10_000, allow_inf_nan=False)
+    pm10: float | None = Field(default=None, ge=0, le=10_000, allow_inf_nan=False)
 
     @field_validator("station_id")
     @classmethod

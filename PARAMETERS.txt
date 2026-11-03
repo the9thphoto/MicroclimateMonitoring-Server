@@ -38,23 +38,7 @@ OpenAPI 描述：/openapi.json
    说明：传感器采集时间，必须携带时区。
    示例：2026-10-29T08:30:00+08:00
 
-3. wind_speed
-   类型：number
-   是否必填：是
-   单位：m/s
-   范围：0-100
-   说明：风速。
-   示例：2.8
-
-4. wind_direction
-   类型：number
-   是否必填：是
-   单位：度（°）
-   范围：0-360
-   说明：风向角度。0° 为正北，90° 为正东，180° 为正南，270° 为正西。
-   示例：135
-
-5. temperature
+3. temperature
    类型：number
    是否必填：是
    单位：摄氏度（°C）
@@ -62,7 +46,7 @@ OpenAPI 描述：/openapi.json
    说明：空气温度。
    示例：21.6
 
-6. humidity
+4. humidity
    类型：number
    是否必填：是
    单位：百分比（%）
@@ -70,31 +54,47 @@ OpenAPI 描述：/openapi.json
    说明：相对湿度。
    示例：63
 
+5. wind_speed
+   类型：number 或 null
+   是否必填：否
+   单位：m/s
+   范围：0-100
+   说明：风速。设备没有该传感器时省略或传 null，数据库保存为 NULL。
+   示例：2.8
+
+6. wind_direction
+   类型：number 或 null
+   是否必填：否
+   单位：度（°）
+   范围：0-360
+   说明：风向角度。0° 为正北，90° 为正东，180° 为正南，270° 为正西。缺失时保存为 NULL。
+   示例：135
+
 7. co2
-   类型：number
-   是否必填：是
+   类型：number 或 null
+   是否必填：否
    单位：ppm
    范围：0-100000
-   说明：二氧化碳浓度。
+   说明：二氧化碳浓度。缺失时保存为 NULL。
    示例：418
 
 8. pm25
-   类型：number
-   是否必填：是
+   类型：number 或 null
+   是否必填：否
    单位：微克每立方米（μg/m³）
    范围：0-10000
-   说明：PM2.5 颗粒物浓度。
+   说明：PM2.5 颗粒物浓度。缺失时保存为 NULL。
    示例：18
 
 9. pm10
-   类型：number
-   是否必填：是
+   类型：number 或 null
+   是否必填：否
    单位：微克每立方米（μg/m³）
    范围：0-10000
-   说明：PM10 颗粒物浓度。
+   说明：PM10 颗粒物浓度。缺失时保存为 NULL。
    示例：34
 
-请求示例：
+完整请求示例：
 
 {
   "station_id": "station-01",
@@ -108,6 +108,15 @@ OpenAPI 描述：/openapi.json
   "pm10": 34
 }
 
+设备最小请求示例（只有温湿度，可选指标省略）：
+
+{
+  "station_id": "station-01",
+  "observed_at": "2026-11-04T08:30:00Z",
+  "temperature": 21.6,
+  "humidity": 63.0
+}
+
 响应字段：
 
 id
@@ -118,9 +127,9 @@ received_at
   类型：ISO 8601 string
   说明：服务器接收并保存数据的时间，响应中统一为 UTC。
 
-其余字段与请求字段一致。observed_at 响应值统一为 UTC。
+其余字段与请求字段一致。observed_at 响应值统一为 UTC。请求中省略或传 null 的可选字段在响应中为 null。
 
-响应示例：
+完整响应示例：
 
 {
   "station_id": "station-01",
@@ -134,6 +143,22 @@ received_at
   "pm10": 34.0,
   "id": 1,
   "received_at": "2026-10-29T00:30:02.123456Z"
+}
+
+设备最小响应示例：
+
+{
+  "station_id": "station-01",
+  "observed_at": "2026-11-04T00:30:00Z",
+  "wind_speed": null,
+  "wind_direction": null,
+  "temperature": 21.6,
+  "humidity": 63.0,
+  "co2": null,
+  "pm25": null,
+  "pm10": null,
+  "id": 2,
+  "received_at": "2026-11-04T00:30:01.234567Z"
 }
 
 PowerShell 调用示例：
@@ -271,26 +296,26 @@ received_at
   类型：带时区时间。
   说明：服务器接收时间，统一存为 UTC。
 
-wind_speed
-  类型：浮点数，单位 m/s。
-
-wind_direction
-  类型：浮点数，单位度。
-
 temperature
-  类型：浮点数，单位 °C。
+  类型：浮点数，单位 °C，非空。
 
 humidity
-  类型：浮点数，单位 %。
+  类型：浮点数，单位 %，非空。
+
+wind_speed
+  类型：浮点数或 NULL，单位 m/s。可选，缺失时保存为 NULL。
+
+wind_direction
+  类型：浮点数或 NULL，单位度。可选，缺失时保存为 NULL。
 
 co2
-  类型：浮点数，单位 ppm。
+  类型：浮点数或 NULL，单位 ppm。可选，缺失时保存为 NULL。
 
 pm25
-  类型：浮点数，单位 μg/m³。
+  类型：浮点数或 NULL，单位 μg/m³。可选，缺失时保存为 NULL。
 
 pm10
-  类型：浮点数，单位 μg/m³。
+  类型：浮点数或 NULL，单位 μg/m³。可选，缺失时保存为 NULL。
 
 组合索引：station_id + observed_at
 说明：用于提高站点历史数据的查询效率。
@@ -328,7 +353,7 @@ WEB_CONCURRENCY
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
-python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
 容器单独运行：
 
@@ -337,7 +362,9 @@ docker run --rm -p 8000:8000 -v weather-data:/app/data campus-weather-api
 
 API 与 PostgreSQL 联合运行：
 
-docker compose up --build -d
+复制模板（docker-compose.yml 已被 .gitignore 忽略，可保存本机密码和端口）：
+cp docker-compose.example.yml docker-compose.yml
+docker compose -f docker-compose.yml up --build -d
 
 Compose 配置默认值：
 API 容器端口：8000
@@ -349,3 +376,50 @@ API 容器端口：8000
 持久化卷：weather-data
 
 生产环境必须使用独立强密码，限制 CORS_ORIGINS，并通过 HTTPS 反向代理访问。
+
+十、设备接入
+----------------------------------------
+设备通过 HTTP 直接上报，无需 Mac 端中继脚本。
+
+请求：
+POST http://<server>:8000/api/v1/measurements
+Content-Type: application/json
+
+{
+  "station_id": "station-01",
+  "observed_at": "2026-11-04T08:30:00Z",
+  "temperature": 21.6,
+  "humidity": 63.0
+}
+
+说明：
+- station_id 由固件配置，默认 station-01。
+- 温度取 Modbus 寄存器 0x0001 的有符号值 ÷ 10。
+- 湿度取 Modbus 寄存器 0x0000 的无符号值 ÷ 10。
+- 设备默认每 60 秒聚合上报一次。
+- 设备通过 SNTP 获取 UTC 时间；未同步时省略 observed_at。
+- 风速、风向、CO2、PM2.5、PM10 不在当前设备上，缺失即 null。
+- 服务必须监听 0.0.0.0 才能被局域网设备访问。
+- 接口没有鉴权，只应部署在受控局域网或带鉴权的反向代理之后。
+
+十一、E2E 回归
+----------------------------------------
+启动服务后执行真实 HTTP 回归：
+
+python tests/e2e_regression.py --base-url http://127.0.0.1:8000
+
+覆盖健康检查、完整/部分上报、校验失败、历史查询、筛选、分页、最新值、
+CORS、OpenAPI 和路由状态码。重启服务后可执行：
+
+python tests/e2e_regression.py --base-url http://127.0.0.1:8000 --check-station e2e-persist
+
+验证 SQLite 或 PostgreSQL 中的持久化记录仍在。
+
+旧数据库升级：
+- SQLite：停止服务后删除 data/weather.db 重建；如需保留数据，重建表并复制。
+- PostgreSQL：
+  ALTER TABLE measurements ALTER COLUMN wind_speed DROP NOT NULL;
+  ALTER TABLE measurements ALTER COLUMN wind_direction DROP NOT NULL;
+  ALTER TABLE measurements ALTER COLUMN co2 DROP NOT NULL;
+  ALTER TABLE measurements ALTER COLUMN pm25 DROP NOT NULL;
+  ALTER TABLE measurements ALTER COLUMN pm10 DROP NOT NULL;
