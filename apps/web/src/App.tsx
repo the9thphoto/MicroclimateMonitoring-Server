@@ -14,6 +14,8 @@ const MapView = lazy(() =>
   import("./features/map/MapView").then((module) => ({ default: module.MapView })),
 );
 
+import type { MapField } from "./features/map/MapView";
+
 import { useHistory } from "./hooks/useHistory";
 import { useLatest } from "./hooks/useLatest";
 import { useMediaQuery } from "./hooks/useMediaQuery";
@@ -21,7 +23,7 @@ import { useNetworkFrames } from "./hooks/useNetworkFrames";
 import { useStationDirectory } from "./hooks/useStationDirectory";
 import { useTimeline } from "./hooks/useTimeline";
 import { dataQuality, toAnalysisPoints } from "./lib/analysis";
-import { buildTemperatureField } from "./lib/field";
+import { buildScalarField } from "./lib/field";
 import { LAYERS, type LayerId, layerById } from "./lib/layers";
 import {
   buildNetworkStations,
@@ -46,7 +48,7 @@ export function App() {
   const [state, setState] = useState<AppUrlState>(() => appStateFromSearch(window.location.search));
   const [pickerOpen, setPickerOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
-  const [fieldVisible, setFieldVisible] = useState(true);
+  const [overlayIds, setOverlayIds] = useState<LayerId[]>(["temperature"]);
   const isMobile = useMediaQuery("(max-width: 700px)");
 
   const latest = useLatest(state.station);
@@ -97,13 +99,50 @@ export function App() {
   const quality = useMemo(() => dataQuality(rows, rangeMs), [rows, rangeMs]);
   const availability = useMemo(() => networkAvailability(visibleStations), [visibleStations]);
   const unlocated = useMemo(() => unlocatedCount(networkStations), [networkStations]);
-  const fieldAvailable = activeLayer.id === "temperature" && displayStations.length >= 3;
-  const field = useMemo(
+  const pointsForAvailability = displayStations.map((station) => station.point);
+  const overlayOptions = useMemo(
     () =>
-      fieldAvailable && fieldVisible && !hasPanel ? buildTemperatureField(displayStations) : null,
-    [fieldAvailable, fieldVisible, hasPanel, displayStations],
+      LAYERS.map((layer) => ({
+        id: layer.id,
+        label: layer.label,
+        shortLabel: layer.shortLabel,
+        stops: layer.stops,
+        available: layer.available(pointsForAvailability),
+        active: overlayIds.includes(layer.id),
+      })),
+    [pointsForAvailability, overlayIds],
   );
+  const fields = useMemo<MapField[]>(() => {
+    if (hasPanel) {
+      return [];
+    }
+    const result: MapField[] = [];
+    for (const id of overlayIds) {
+      const layer = layerById(id);
+      const field = buildScalarField(displayStations, id, layer.valueOf);
+      if (field) {
+        result.push({
+          id,
+          layer,
+          field,
+          opacity: id === state.layer ? 0.55 : 0.28,
+        });
+      }
+    }
+    return result.sort((left, right) =>
+      left.id === state.layer ? 1 : right.id === state.layer ? -1 : 0,
+    );
+  }, [overlayIds, displayStations, hasPanel, state.layer]);
+  const activeField = fields.find((item) => item.id === state.layer);
+  const fieldSource = activeField
+    ? `IDW ${activeField.layer.label}场 · ${activeField.field.stationCount} 站 · 远场均值 ${activeField.field.mean.toFixed(1)}${activeField.layer.unit} · 虚线内有效`
+    : undefined;
   const displayDomain = activeLayer.domain;
+  const toggleOverlay = useCallback((id: LayerId) => {
+    setOverlayIds((previous) =>
+      previous.includes(id) ? previous.filter((item) => item !== id) : [...previous, id],
+    );
+  }, []);
 
   const updateState = useCallback((patch: Partial<AppUrlState>) => {
     setState((previous) => {
@@ -258,9 +297,6 @@ export function App() {
         directory.isLoading || latest.isLoading || history.isLoading || networkFrames.isLoading
       }
       offline={offline}
-      fieldAvailable={fieldAvailable && !hasPanel}
-      fieldVisible={fieldVisible}
-      onToggleField={() => setFieldVisible((visible) => !visible)}
       onOpenSearch={openPicker}
       onOpenAnalysis={openAnalysis}
       onBackToMap={openMap}
@@ -351,7 +387,7 @@ export function App() {
                 focus={focus}
                 mode={hasPanel ? "station" : "overview"}
                 domain={displayDomain}
-                field={field}
+                fields={fields}
                 onSelectStation={selectStation}
               />
             </Suspense>
@@ -396,11 +432,9 @@ export function App() {
               onSpeedChange={networkTimeline.setSpeed}
               onToLatest={networkTimeline.toLatest}
               domain={displayDomain}
-              source={
-                field
-                  ? `IDW 温度场 · ${field.stationCount} 站 · 远场均值 ${field.mean.toFixed(1)}°C · 虚线内有效`
-                  : undefined
-              }
+              source={fieldSource}
+              overlays={overlayOptions}
+              onToggleOverlay={toggleOverlay}
               compact={isMobile}
             />
           )}

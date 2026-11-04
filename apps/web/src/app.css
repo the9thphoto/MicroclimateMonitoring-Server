@@ -2038,7 +2038,7 @@ button:disabled {
 
 @media (max-width: 700px) {
   .app-shell {
-    grid-template-rows: 56px minmax(0, 1fr) 170px;
+    grid-template-rows: 56px minmax(0, 1fr) 200px;
   }
 
   .topbar {
@@ -2370,20 +2370,44 @@ button:disabled {
   color: var(--accent);
 }
 
-.topbar__field-toggle {
-  white-space: nowrap;
-  min-width: 52px;
+.timeline-dock__overlays {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+
+.timeline-dock__overlays::-webkit-scrollbar {
+  display: none;
+}
+
+.overlay-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
   border: 1px solid var(--border);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.04);
   color: var(--muted);
   font-size: 10px;
-  font-weight: 700;
-  padding: 5px 9px;
+  font-weight: 600;
+  padding: 4px 8px;
 }
 
-.topbar__field-toggle[aria-pressed="true"] {
+.overlay-chip__swatch {
+  width: 16px;
+  height: 7px;
+  border-radius: 999px;
+}
+
+.overlay-chip.is-active {
   border-color: color-mix(in srgb, var(--accent) 55%, transparent);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  color: var(--accent);
+  color: var(--text);
+}
+
+.overlay-chip:disabled {
+  opacity: 0.38;
 }

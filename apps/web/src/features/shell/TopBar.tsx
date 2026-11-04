@@ -11,9 +11,6 @@ interface TopBarProps {
   point: AnalysisPoint | null;
   loading: boolean;
   offline: boolean;
-  fieldAvailable: boolean;
-  fieldVisible: boolean;
-  onToggleField: () => void;
   onOpenSearch: () => void;
   onOpenAnalysis: () => void;
   onBackToMap: () => void;
@@ -28,9 +25,6 @@ export function TopBar({
   point,
   loading,
   offline,
-  fieldAvailable,
-  fieldVisible,
-  onToggleField,
   onOpenSearch,
   onOpenAnalysis,
   onBackToMap,
@@ -95,18 +89,6 @@ export function TopBar({
       </div>
 
       <div className="topbar__actions">
-        {fieldAvailable ? (
-          <button
-            type="button"
-            className="topbar__field-toggle"
-            aria-pressed={fieldVisible}
-            aria-label={fieldVisible ? "隐藏温度场" : "显示温度场"}
-            onClick={onToggleField}
-            title={fieldVisible ? "隐藏温度场" : "显示温度场"}
-          >
-            {fieldVisible ? "温度场" : "场"}
-          </button>
-        ) : null}
         <button
           type="button"
           onClick={onOpenAnalysis}

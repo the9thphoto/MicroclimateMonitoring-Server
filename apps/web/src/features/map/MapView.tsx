@@ -3,13 +3,20 @@ import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
 import { useEffect, useRef, useState } from "react";
 
 import { colorForValue, hexToRgb } from "../../lib/colors";
-import type { TemperatureField } from "../../lib/field";
-import type { LayerDefinition } from "../../lib/layers";
+import type { ScalarField } from "../../lib/field";
+import type { LayerDefinition, LayerId } from "../../lib/layers";
 import { formatLayerValue, layerColor } from "../../lib/layers";
 import { CAMPUS_LOCATION, type StationLocation } from "../../lib/location";
 import { FitIcon, LocateIcon, MapPinIcon } from "../shell/icons";
 import { MapFallback, type MapStationMarker } from "./MapFallback";
 import { createFallbackStyle, MAP_STYLE_URL } from "./mapStyle";
+
+export interface MapField {
+  id: LayerId;
+  layer: LayerDefinition;
+  field: ScalarField;
+  opacity: number;
+}
 
 interface MapViewProps {
   markers: MapStationMarker[];
@@ -17,7 +24,7 @@ interface MapViewProps {
   focus: StationLocation | null;
   mode: "overview" | "station" | "forecast";
   domain: [number, number];
-  field: TemperatureField | null;
+  fields: MapField[];
   onSelectStation: (stationId: string) => void;
 }
 
@@ -91,7 +98,7 @@ export function MapView({
   focus,
   mode,
   domain,
-  field,
+  fields,
   onSelectStation,
 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -245,78 +252,83 @@ export function MapView({
     if (!map || !ready || failed || (styleFallback && !map.isStyleLoaded())) {
       return;
     }
-    const layerId = "temperature-field";
-    const sourceId = "temperature-field";
-    const boundaryLayerId = "temperature-field-boundary";
-    const boundarySourceId = "temperature-field-boundary";
     const remove = () => {
-      for (const id of [boundaryLayerId, layerId]) {
-        if (map.getLayer(id)) {
-          map.removeLayer(id);
+      const style = map.getStyle();
+      if (!style) {
+        return;
+      }
+      for (const layer of style.layers ?? []) {
+        if (layer.id.startsWith("field-") && map.getLayer(layer.id)) {
+          map.removeLayer(layer.id);
         }
       }
-      for (const id of [sourceId, boundarySourceId]) {
-        if (map.getSource(id)) {
-          map.removeSource(id);
+      for (const sourceId of Object.keys(style.sources ?? {})) {
+        if (sourceId.startsWith("field-") && map.getSource(sourceId)) {
+          map.removeSource(sourceId);
         }
       }
     };
     remove();
-    if (!field) {
+    if (fields.length === 0) {
       return remove;
     }
 
-    const canvas = document.createElement("canvas");
-    canvas.width = field.width;
-    canvas.height = field.height;
-    const context = canvas.getContext("2d");
-    if (!context) {
-      return remove;
-    }
-    const image = context.createImageData(field.width, field.height);
-    for (let index = 0; index < field.values.length; index += 1) {
-      const value = field.values[index];
-      if (value === undefined || !Number.isFinite(value)) {
+    const firstSymbol = map.getStyle()?.layers?.find((layer) => layer.type === "symbol")?.id;
+    for (const item of fields) {
+      const { field, layer, opacity, id } = item;
+      const canvas = document.createElement("canvas");
+      canvas.width = field.width;
+      canvas.height = field.height;
+      const context = canvas.getContext("2d");
+      if (!context) {
         continue;
       }
-      const [red, green, blue] = hexToRgb(colorForValue(value, domain, activeLayer.stops));
-      const offset = index * 4;
-      image.data[offset] = red;
-      image.data[offset + 1] = green;
-      image.data[offset + 2] = blue;
-      image.data[offset + 3] = Math.round((field.alpha[index] ?? 0) * 235);
-    }
-    context.putImageData(image, 0, 0);
-    const { west, east, south, north } = field.bounds;
-    map.addSource(sourceId, {
-      type: "image",
-      url: canvas.toDataURL("image/png"),
-      coordinates: [
-        [west, north],
-        [east, north],
-        [east, south],
-        [west, south],
-      ],
-    });
-    const firstSymbol = map.getStyle().layers?.find((layer) => layer.type === "symbol")?.id;
-    map.addLayer(
-      {
-        id: layerId,
-        type: "raster",
-        source: sourceId,
-        paint: {
-          "raster-opacity": 0.55,
-          "raster-resampling": "linear",
-          "raster-fade-duration": 0,
+      const image = context.createImageData(field.width, field.height);
+      for (let index = 0; index < field.values.length; index += 1) {
+        const value = field.values[index];
+        if (value === undefined || !Number.isFinite(value)) {
+          continue;
+        }
+        const [red, green, blue] = hexToRgb(colorForValue(value, layer.domain, layer.stops));
+        const offset = index * 4;
+        image.data[offset] = red;
+        image.data[offset + 1] = green;
+        image.data[offset + 2] = blue;
+        image.data[offset + 3] = Math.round((field.alpha[index] ?? 0) * 235);
+      }
+      context.putImageData(image, 0, 0);
+      const { west, east, south, north } = field.bounds;
+      const sourceId = `field-${id}`;
+      const layerId = `field-${id}`;
+      map.addSource(sourceId, {
+        type: "image",
+        url: canvas.toDataURL("image/png"),
+        coordinates: [
+          [west, north],
+          [east, north],
+          [east, south],
+          [west, south],
+        ],
+      });
+      map.addLayer(
+        {
+          id: layerId,
+          type: "raster",
+          source: sourceId,
+          paint: {
+            "raster-opacity": opacity,
+            "raster-resampling": "linear",
+            "raster-fade-duration": 0,
+          },
         },
-      },
-      firstSymbol,
-    );
+        firstSymbol,
+      );
+    }
 
-    const boundary = field.hull.map((point) => [point.longitude, point.latitude]);
+    const boundary = fields[0]?.field.hull.map((point) => [point.longitude, point.latitude]) ?? [];
     if (boundary.length >= 3) {
       boundary.push(boundary[0]!);
-      map.addSource(boundarySourceId, {
+      map.addSource("field-boundary", {
         type: "geojson",
         data: {
           type: "Feature",
@@ -326,9 +338,9 @@ export function MapView({
       });
       map.addLayer(
         {
-          id: boundaryLayerId,
+          id: "field-boundary",
           type: "line",
-          source: boundarySourceId,
+          source: "field-boundary",
           paint: {
             "line-color": "#d8e8ed",
             "line-width": 1.2,
@@ -340,7 +352,7 @@ export function MapView({
       );
     }
     return remove;
-  }, [field, ready, failed, styleFallback, activeLayer, domain]);
+  }, [fields, ready, failed, styleFallback]);
 
   const fitAll = () => {
     const map = mapRef.current;
@@ -370,7 +382,11 @@ export function MapView({
 
   return (
     <div
-      className={["map-view", field ? "has-field" : "", styleFallback ? "is-fallback" : ""]
+      className={[
+        "map-view",
+        fields.length > 0 ? "has-field" : "",
+        styleFallback ? "is-fallback" : "",
+      ]
         .filter(Boolean)
         .join(" ")}
     >

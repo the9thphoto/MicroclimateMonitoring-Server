@@ -102,8 +102,9 @@ test("network map shows all reported stations and switches layers without select
       .evaluate((element) => getComputedStyle(element).position),
   ).toBe("absolute");
 
-  const temperature = page.getByRole("button", { name: "温度", exact: true });
-  const humidity = page.getByRole("button", { name: "湿度", exact: true });
+  const rail = page.locator(".layer-rail");
+  const temperature = rail.getByRole("button", { name: "温度", exact: true });
+  const humidity = rail.getByRole("button", { name: "湿度", exact: true });
   await expect(temperature).toBeEnabled();
   await expect(humidity).toBeEnabled();
   await humidity.click();
@@ -238,10 +239,14 @@ test("dense station networks use compact clickable markers", async ({ page, requ
 
   await expect(page.locator(".map-view.has-field")).toBeVisible();
   await expect(page.getByText(/IDW 温度场/)).toBeVisible();
-  await page.locator(".topbar__field-toggle").click();
+  const temperatureOverlay = page.locator(".overlay-chip").filter({ hasText: "温度" });
+  const humidityOverlay = page.locator(".overlay-chip").filter({ hasText: "湿度" });
+  await temperatureOverlay.click();
   await expect(page.locator(".map-view.has-field")).toHaveCount(0);
-  await page.locator(".topbar__field-toggle").click();
+  await temperatureOverlay.click();
   await expect(page.locator(".map-view.has-field")).toBeVisible();
+  await humidityOverlay.click();
+  await expect(page.locator(".overlay-chip.is-active")).toHaveCount(2);
 
   await dense.dispatchEvent("click");
   await expect(page.locator(".station-panel")).toBeVisible();

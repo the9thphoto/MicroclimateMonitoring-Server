@@ -1,3 +1,4 @@
+import type { LayerId } from "./layers";
 import type { NetworkStation } from "./network";
 
 export interface FieldBounds {
@@ -7,7 +8,8 @@ export interface FieldBounds {
   north: number;
 }
 
-export interface TemperatureField {
+export interface ScalarField {
+  id: LayerId;
   bounds: FieldBounds;
   width: number;
   height: number;
@@ -129,13 +131,16 @@ function hullEdgeDistance(latitude: number, longitude: number, hull: HullPoint[]
   return distance;
 }
 
-function pointsFromStations(stations: NetworkStation[]): FieldPoint[] {
+function pointsFromStations(
+  stations: NetworkStation[],
+  read: (point: NetworkStation["point"]) => number | null,
+): FieldPoint[] {
   const points: FieldPoint[] = [];
   for (const station of stations) {
     if (!station.location) {
       continue;
     }
-    const value = finiteOrNull(station.point.temperature);
+    const value = finiteOrNull(read(station.point));
     if (value === null) {
       continue;
     }
@@ -173,8 +178,12 @@ export function idwValue(
   return weighted / totalWeight;
 }
 
-export function buildTemperatureField(stations: NetworkStation[]): TemperatureField | null {
-  const points = pointsFromStations(stations);
+export function buildScalarField(
+  stations: NetworkStation[],
+  id: LayerId,
+  read: (point: NetworkStation["point"]) => number | null,
+): ScalarField | null {
+  const points = pointsFromStations(stations, read);
   if (points.length < 3) {
     return null;
   }
@@ -213,6 +222,7 @@ export function buildTemperatureField(stations: NetworkStation[]): TemperatureFi
   }
 
   return {
+    id,
     bounds: { west, east, south, north },
     width,
     height,
@@ -222,4 +232,8 @@ export function buildTemperatureField(stations: NetworkStation[]): TemperatureFi
     hull,
     stationCount: points.length,
   };
+}
+
+export function buildTemperatureField(stations: NetworkStation[]): ScalarField | null {
+  return buildScalarField(stations, "temperature", (point) => point.temperature);
 }

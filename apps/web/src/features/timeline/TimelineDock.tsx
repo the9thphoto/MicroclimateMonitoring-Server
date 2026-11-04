@@ -1,11 +1,20 @@
 import { TimelineChart } from "@microclimate/ui";
 
 import type { AnalysisPoint } from "../../lib/analysis";
-import type { LayerDefinition } from "../../lib/layers";
+import type { LayerDefinition, LayerId } from "../../lib/layers";
 import { formatLayerValue, layerColor } from "../../lib/layers";
 import { RANGE_OPTIONS, type RangeKey } from "../../lib/ranges";
 import { MapLegend } from "../layers/MapLegend";
 import { PauseIcon, PlayIcon } from "../shell/icons";
+
+export interface OverlayOption {
+  id: LayerId;
+  label: string;
+  shortLabel: string;
+  available: boolean;
+  active: boolean;
+  stops: string[];
+}
 
 interface TimelineDockProps {
   points: AnalysisPoint[];
@@ -23,6 +32,8 @@ interface TimelineDockProps {
   onToLatest: () => void;
   domain?: [number, number];
   source?: string;
+  overlays?: OverlayOption[];
+  onToggleOverlay?: (id: LayerId) => void;
   compact?: boolean;
 }
 
@@ -42,6 +53,8 @@ export function TimelineDock({
   onToLatest,
   domain,
   source,
+  overlays,
+  onToggleOverlay,
   compact = false,
 }: TimelineDockProps) {
   const selectedValue = selected ? layer.valueOf(selected) : null;
@@ -56,6 +69,28 @@ export function TimelineDock({
 
   return (
     <section className="timeline-dock" aria-label="时间轴与回放">
+      {overlays && overlays.length > 0 ? (
+        <div className="timeline-dock__overlays" role="toolbar" aria-label="可视化叠加">
+          {overlays.map((overlay) => (
+            <button
+              key={overlay.id}
+              type="button"
+              className={overlay.active ? "overlay-chip is-active" : "overlay-chip"}
+              aria-pressed={overlay.active}
+              disabled={!overlay.available}
+              title={overlay.available ? overlay.label : `${overlay.label}：全网暂无数据`}
+              onClick={() => onToggleOverlay?.(overlay.id)}
+            >
+              <span
+                className="overlay-chip__swatch"
+                style={{ background: `linear-gradient(90deg, ${overlay.stops.join(", ")})` }}
+                aria-hidden="true"
+              />
+              {overlay.shortLabel}
+            </button>
+          ))}
+        </div>
+      ) : null}
       <div className="timeline-dock__head">
         <div className="timeline-dock__range" role="toolbar" aria-label="时间范围">
           {RANGE_OPTIONS.map((option) => (
