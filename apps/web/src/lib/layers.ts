@@ -30,7 +30,19 @@ export const LAYERS: LayerDefinition[] = [
     unit: "°C",
     digits: 1,
     domain: [-20, 45],
-    stops: ["#2563eb", "#0ea5e9", "#22d3ee", "#34d399", "#facc15", "#f97316", "#ef4444"],
+    stops: [
+      "#042333",
+      "#10326c",
+      "#40349f",
+      "#674396",
+      "#8b538d",
+      "#b15f82",
+      "#d66c6c",
+      "#f2814e",
+      "#fca63c",
+      "#f7d045",
+      "#e8fa5b",
+    ],
     valueOf: (point) => point.temperature,
     available: (points) => hasValue(points, (point) => point.temperature),
   },
@@ -81,6 +93,9 @@ export const LAYERS: LayerDefinition[] = [
 ];
 
 export const DEFAULT_LAYER: LayerId = "temperature";
+
+/** Fixed temperature ticks keep the scale comparable between screenshots. */
+export const TEMPERATURE_TICKS = [-20, -10, 0, 10, 20, 30, 40];
 
 export function isLayerId(value: string | null | undefined): value is LayerId {
   return LAYERS.some((layer) => layer.id === value);

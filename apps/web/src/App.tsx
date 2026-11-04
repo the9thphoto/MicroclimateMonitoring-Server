@@ -90,7 +90,7 @@ export function App() {
       fieldAvailable && fieldVisible && !hasPanel ? buildTemperatureField(visibleStations) : null,
     [fieldAvailable, fieldVisible, hasPanel, visibleStations],
   );
-  const displayDomain = field?.domain ?? activeLayer.domain;
+  const displayDomain = activeLayer.domain;
 
   const updateState = useCallback((patch: Partial<AppUrlState>) => {
     setState((previous) => {
@@ -365,7 +365,11 @@ export function App() {
               loading={directory.isLoading}
               fieldAvailable={fieldAvailable}
               fieldVisible={fieldVisible}
-              fieldSource={field ? `IDW 温度场 · ${field.stationCount} 站` : undefined}
+              fieldSource={
+                field
+                  ? `IDW 温度场 · ${field.stationCount} 站 · 远场均值 ${field.mean.toFixed(1)}°C · 虚线内有效`
+                  : undefined
+              }
               onToggleField={() => setFieldVisible((visible) => !visible)}
               onRefresh={() => void directory.refetch()}
             />

@@ -1,12 +1,15 @@
-import type { LayerDefinition } from "../../lib/layers";
+import { type LayerDefinition, TEMPERATURE_TICKS } from "../../lib/layers";
 
 interface MapLegendProps {
   layer: LayerDefinition;
   domain?: [number, number];
+  ticks?: number[];
   source?: string;
 }
 
-export function MapLegend({ layer, domain = layer.domain, source }: MapLegendProps) {
+export function MapLegend({ layer, domain = layer.domain, ticks, source }: MapLegendProps) {
+  const tickValues =
+    ticks ?? (layer.id === "temperature" ? TEMPERATURE_TICKS : [domain[0], domain[1]]);
   return (
     <section
       className="map-legend"
@@ -22,8 +25,9 @@ export function MapLegend({ layer, domain = layer.domain, source }: MapLegendPro
         aria-hidden="true"
       />
       <div className="map-legend__ticks">
-        <span>{domain[0]}</span>
-        <span>{domain[1]}</span>
+        {tickValues.map((tick) => (
+          <span key={tick}>{tick}</span>
+        ))}
       </div>
       <span className="map-legend__source">{source ?? "站点观测 · 非空间插值"}</span>
     </section>

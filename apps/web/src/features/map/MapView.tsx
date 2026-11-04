@@ -247,12 +247,18 @@ export function MapView({
     }
     const layerId = "temperature-field";
     const sourceId = "temperature-field";
+    const boundaryLayerId = "temperature-field-boundary";
+    const boundarySourceId = "temperature-field-boundary";
     const remove = () => {
-      if (map.getLayer(layerId)) {
-        map.removeLayer(layerId);
+      for (const id of [boundaryLayerId, layerId]) {
+        if (map.getLayer(id)) {
+          map.removeLayer(id);
+        }
       }
-      if (map.getSource(sourceId)) {
-        map.removeSource(sourceId);
+      for (const id of [sourceId, boundarySourceId]) {
+        if (map.getSource(id)) {
+          map.removeSource(id);
+        }
       }
     };
     remove();
@@ -306,6 +312,33 @@ export function MapView({
       },
       firstSymbol,
     );
+
+    const boundary = field.hull.map((point) => [point.longitude, point.latitude]);
+    if (boundary.length >= 3) {
+      boundary.push(boundary[0]!);
+      map.addSource(boundarySourceId, {
+        type: "geojson",
+        data: {
+          type: "Feature",
+          properties: {},
+          geometry: { type: "LineString", coordinates: boundary },
+        },
+      });
+      map.addLayer(
+        {
+          id: boundaryLayerId,
+          type: "line",
+          source: boundarySourceId,
+          paint: {
+            "line-color": "#d8e8ed",
+            "line-width": 1.2,
+            "line-opacity": 0.72,
+            "line-dasharray": [2, 2],
+          },
+        },
+        firstSymbol,
+      );
+    }
     return remove;
   }, [field, ready, failed, styleFallback, activeLayer, domain]);
 

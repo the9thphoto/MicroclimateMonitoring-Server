@@ -38,6 +38,8 @@ describe("layers", () => {
 
   it("maps values into the layer color scale", () => {
     const temperature = layerById("temperature");
+    expect(temperature.domain).toEqual([-20, 45]);
+    expect(temperature.stops).toHaveLength(11);
     expect(layerColor(temperature, -100)).toBe(temperature.stops[0]);
     expect(layerColor(temperature, 100)).toBe(temperature.stops[temperature.stops.length - 1]);
     expect(layerColor(temperature, null)).toBe("#94a3b8");

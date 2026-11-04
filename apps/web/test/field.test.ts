@@ -53,8 +53,8 @@ describe("temperature field", () => {
       { latitude: 32, longitude: 118.6, value: 20 },
       { latitude: 32.1, longitude: 118.6, value: 24 },
     ];
-    expect(idwValue(points, 32.05, 118.6, 0.2)).toBeCloseTo(22, 5);
-    expect(idwValue(points, 33, 119, 0.2)).toBeNull();
+    expect(idwValue(points, 32.05, 118.6, 22)).toBeCloseTo(22, 5);
+    expect(idwValue(points, 33, 119, 22, 0.5)).toBe(22);
   });
 
   it("builds a hull and masks points outside it", () => {
@@ -79,8 +79,8 @@ describe("temperature field", () => {
     ]);
     expect(field).not.toBeNull();
     expect(field?.stationCount).toBe(3);
-    expect(field?.domain[0]).toBeLessThan(20);
-    expect(field?.domain[1]).toBeGreaterThan(24);
+    expect(field?.mean).toBeCloseTo(22, 5);
+    expect(field?.hull.length).toBeGreaterThanOrEqual(3);
     expect(field?.values.some((value) => Number.isFinite(value))).toBe(true);
     expect(field?.alpha.some((value) => value > 0)).toBe(true);
   });

@@ -13,9 +13,9 @@ export interface TemperatureField {
   height: number;
   values: Float32Array;
   alpha: Float32Array;
-  domain: [number, number];
+  mean: number;
+  hull: HullPoint[];
   stationCount: number;
-  maxDistance: number;
 }
 
 interface FieldPoint {
@@ -24,13 +24,12 @@ interface FieldPoint {
   value: number;
 }
 
-interface HullPoint {
+export interface HullPoint {
   latitude: number;
   longitude: number;
 }
 
 const GRID_SIZE = 144;
-const MIN_DOMAIN_SPAN = 2;
 
 function finiteOrNull(value: number | null | undefined): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
@@ -153,38 +152,25 @@ export function idwValue(
   points: FieldPoint[],
   latitude: number,
   longitude: number,
-  maxDistance: number,
-): number | null {
+  mean: number,
+  farDistance = Number.POSITIVE_INFINITY,
+): number {
   let weighted = 0;
   let totalWeight = 0;
-  const maxDistanceSquared = maxDistance * maxDistance;
+  let nearest = Number.POSITIVE_INFINITY;
   for (const point of points) {
     const dLat = latitude - point.latitude;
     const dLon = longitude - point.longitude;
     const distanceSquared = dLat * dLat + dLon * dLon;
-    if (distanceSquared > maxDistanceSquared) {
-      continue;
-    }
+    nearest = Math.min(nearest, distanceSquared);
     const weight = 1 / (distanceSquared + 1e-10);
     weighted += point.value * weight;
     totalWeight += weight;
   }
-  return totalWeight > 0 ? weighted / totalWeight : null;
-}
-
-function domainFromValues(values: number[]): [number, number] {
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const span = max - min;
-  const padded = Math.max(0.5, span * 0.12);
-  let low = min - padded;
-  let high = max + padded;
-  if (high - low < MIN_DOMAIN_SPAN) {
-    const center = (low + high) / 2;
-    low = center - MIN_DOMAIN_SPAN / 2;
-    high = center + MIN_DOMAIN_SPAN / 2;
+  if (totalWeight === 0 || nearest > farDistance * farDistance) {
+    return mean;
   }
-  return [Number(low.toFixed(1)), Number(high.toFixed(1))];
+  return weighted / totalWeight;
 }
 
 export function buildTemperatureField(stations: NetworkStation[]): TemperatureField | null {
@@ -204,7 +190,8 @@ export function buildTemperatureField(stations: NetworkStation[]): TemperatureFi
   const west = Math.min(...longitudes) - 0.01;
   const east = Math.max(...longitudes) + 0.01;
   const diagonal = Math.hypot(north - south, east - west);
-  const maxDistance = Math.max(0.025, diagonal * 0.2);
+  const farDistance = Math.max(0.5, diagonal * 10);
+  const mean = points.reduce((sum, point) => sum + point.value, 0) / points.length;
   const width = GRID_SIZE;
   const height = GRID_SIZE;
   const values = new Float32Array(width * height);
@@ -218,12 +205,7 @@ export function buildTemperatureField(stations: NetworkStation[]): TemperatureFi
         values[y * width + x] = Number.NaN;
         continue;
       }
-      const value = idwValue(points, latitude, longitude, maxDistance);
-      if (value === null) {
-        values[y * width + x] = Number.NaN;
-        continue;
-      }
-      values[y * width + x] = value;
+      values[y * width + x] = idwValue(points, latitude, longitude, mean, farDistance);
       const edge = Math.min(x, width - 1 - x, y, height - 1 - y);
       const hullFade = Math.min(1, hullEdgeDistance(latitude, longitude, hull) / 0.006);
       alpha[y * width + x] = Math.min(1, edge / (width * 0.12)) * hullFade;
@@ -236,8 +218,8 @@ export function buildTemperatureField(stations: NetworkStation[]): TemperatureFi
     height,
     values,
     alpha,
-    domain: domainFromValues(points.map((point) => point.value)),
+    mean,
+    hull,
     stationCount: points.length,
-    maxDistance,
   };
 }
