@@ -1,110 +1,194 @@
-import { expect, test } from "@playwright/test";
+import { type APIRequestContext, expect, type Page, test } from "@playwright/test";
 
 const apiBaseURL = "http://127.0.0.1:18000";
 
-test("shows current conditions, visualizations and history table", async ({ page, request }) => {
-  const station = `e2e-${Date.now()}`;
-  const observedAt = new Date().toISOString();
-
-  for (let index = 0; index < 3; index += 1) {
-    const response = await request.post(`${apiBaseURL}/api/v1/measurements`, {
-      data: {
-        station_id: station,
-        observed_at: new Date(Date.parse(observedAt) - index * 60_000).toISOString(),
-        temperature: 23.4 - index,
-        humidity: 56.7 - index,
-      },
-    });
-    expect(response.status()).toBe(201);
-  }
-
-  await page.goto(`/?station=${station}`);
-
-  await expect(page.getByRole("heading", { name: "气象分析面板" })).toBeVisible();
-  const current = page.getByRole("region", { name: "当前观测" });
-  await expect(current).toContainText("23.4");
-  await expect(current).toContainText("56.7");
-  await expect(page.getByRole("img", { name: /^温湿指数/ })).toBeVisible();
-  await expect(page.getByRole("img", { name: "温湿度趋势图" })).toBeVisible();
-  await expect(page.getByRole("img", { name: /温度日历热力图/ })).toBeVisible();
-  await expect(page.getByRole("img", { name: "温度按小时分布箱线图" })).toBeVisible();
-  await expect(page.getByRole("img", { name: "温湿度舒适度分布图" })).toBeVisible();
-
-  const records = page.getByRole("table", { name: "最近测量记录" });
-  await expect(records).toBeVisible();
-  await expect(records.getByRole("row")).toHaveCount(4);
-
-  await page.getByRole("tab", { name: "1 小时" }).click();
-  await expect(page.getByRole("tab", { name: "1 小时" })).toHaveAttribute("aria-selected", "true");
-});
-
-test("station form switches the dashboard", async ({ page, request }) => {
-  const station = `e2e-form-${Date.now()}`;
-  const response = await request.post(`${apiBaseURL}/api/v1/measurements`, {
-    data: {
-      station_id: station,
-      temperature: 19.2,
-      humidity: 44.5,
+const MAP_STYLE = {
+  version: 8,
+  sources: {},
+  layers: [
+    {
+      id: "background",
+      type: "background",
+      paint: { "background-color": "#071318" },
     },
+  ],
+};
+
+async function mockMap(page: Page) {
+  await page.route("https://tiles.openfreemap.org/**", async (route) => {
+    const url = route.request().url();
+    if (url.endsWith("/styles/dark")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(MAP_STYLE),
+      });
+      return;
+    }
+    await route.abort();
   });
-  expect(response.status()).toBe(201);
+  await page.route("https://tile.openstreetmap.org/**", (route) => route.abort());
+}
 
-  await page.goto("/?station=station-01");
-  await page.getByRole("textbox", { name: "站点" }).fill(station);
-  await page.getByRole("button", { name: "应用", exact: true }).click();
+async function setLocations(
+  page: Page,
+  locations: Record<string, { latitude: number; longitude: number }>,
+) {
+  await page.addInitScript((entries) => {
+    for (const [station, location] of Object.entries(entries)) {
+      localStorage.setItem(`microclimate.location.${station}`, JSON.stringify(location));
+    }
+  }, locations);
+}
 
-  await expect(page.getByRole("cell", { name: "19.2" })).toBeVisible();
-  await expect(page).toHaveURL(new RegExp(`station=${station}`));
-});
-
-test("optional sensors unlock air quality and wind visualizations", async ({ page, request }) => {
-  const station = `e2e-sensors-${Date.now()}`;
-  const observedAt = new Date().toISOString();
-
-  const samples = [
-    { wind_speed: 2.4, wind_direction: 20, co2: 680, pm25: 22, pm10: 40 },
-    { wind_speed: 3.1, wind_direction: 95, co2: 720, pm25: 30, pm10: 55 },
-    { wind_speed: 4.6, wind_direction: 210, co2: 760, pm25: 38, pm10: 70 },
-  ];
-
-  for (const [index, sample] of samples.entries()) {
+async function seedStation(request: APIRequestContext, station: string, count = 4) {
+  const now = Date.now();
+  for (let index = 0; index < count; index += 1) {
     const response = await request.post(`${apiBaseURL}/api/v1/measurements`, {
       data: {
         station_id: station,
-        observed_at: new Date(Date.parse(observedAt) - index * 60_000).toISOString(),
-        temperature: 24 - index,
-        humidity: 52 + index,
-        ...sample,
+        observed_at: new Date(now - index * 60_000).toISOString(),
+        temperature: 23.4 - index * 0.4,
+        humidity: 56.7 - index * 0.5,
+        wind_speed: 2.4 + index * 0.2,
+        wind_direction: 90 + index * 15,
+        co2: 680 + index * 10,
+        pm25: 22 + index,
+        pm10: 40 + index,
       },
     });
     expect(response.status()).toBe(201);
   }
+}
 
-  await page.goto(`/?station=${station}`);
+test("map workspace switches stations, layers and analysis views", async ({ page, request }) => {
+  await mockMap(page);
+  const suffix = Date.now();
+  const main = `e2e-map-${suffix}`;
+  const north = `e2e-north-${suffix}`;
+  const east = `e2e-east-${suffix}`;
+  await setLocations(page, {
+    [main]: { latitude: 31.2304, longitude: 121.4737 },
+    [north]: { latitude: 31.26, longitude: 121.45 },
+    [east]: { latitude: 31.22, longitude: 121.51 },
+  });
+  await seedStation(request, main, 6);
+  await seedStation(request, north, 3);
+  await seedStation(request, east, 3);
 
-  const trendTabs = page.getByRole("tablist", { name: "趋势指标" });
-  await trendTabs.getByRole("tab", { name: "空气质量" }).click();
-  await expect(page.getByRole("img", { name: "空气质量趋势图" })).toBeVisible();
-  await expect(page.getByRole("img", { name: /风玫瑰图/ })).toBeVisible();
-  await expect(page.getByRole("img", { name: /空气质量指数/ })).toBeVisible();
+  await page.goto(`/?station=${main}&view=map&layer=temperature&range=24h`);
 
-  const heatmapTabs = page.getByRole("tablist", { name: "热力图指标" });
-  await heatmapTabs.getByRole("tab", { name: "湿度" }).click();
-  await expect(page.getByRole("img", { name: /湿度日历热力图/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "微气候观测地图" })).toBeVisible();
+  await expect(page.locator(".maplibregl-canvas")).toBeVisible();
+  await expect(page.locator(`.station-marker[data-station="${main}"]`)).toBeVisible();
+  await expect(page.locator(`.station-marker[data-station="${north}"]`)).toBeVisible();
+  await expect(page.locator(`.station-marker[data-station="${east}"]`)).toBeVisible();
+
+  await page.getByRole("button", { name: "湿度", exact: true }).click();
+  await expect(page).toHaveURL(/layer=humidity/);
+  await expect(page.locator(".topbar__status")).toContainText("相对湿度");
+
+  await page.locator(`.station-marker[data-station="${main}"]`).click();
+  await expect(page.locator(".station-panel")).toBeVisible();
+  await expect(page.locator(".station-panel")).toContainText("次要要素");
+  await expect(page.getByRole("button", { name: "关闭站点详情，返回总览地图" })).toBeVisible();
+  await page.getByRole("button", { name: "关闭站点详情，返回总览地图" }).click();
+  await expect(page.locator(".station-panel")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "打开分析工作台" }).click();
+  await expect(page.getByRole("heading", { name: "分析工作台" })).toBeVisible();
+  await expect(page.locator(".maplibregl-canvas")).toHaveCount(0);
+  await page.getByRole("tab", { name: "分时分布" }).click();
+  await expect(page.locator(".box-plot")).toBeVisible();
+  await page.getByRole("tab", { name: "要素相关" }).click();
+  await expect(page.locator(".correlation__table")).toBeVisible();
+  await page.getByRole("button", { name: "返回地图" }).click();
+  await expect(page.locator(".maplibregl-canvas")).toBeVisible();
 });
 
-test("station map accepts coordinates from the URL", async ({ page }) => {
-  await page.route("https://www.openstreetmap.org/**", (route) => route.abort());
-  await page.goto("/?station=station-01&lat=31.2304&lon=121.4737");
+test("timeline playback and scrubbing update the selected frame", async ({ page, request }) => {
+  await mockMap(page);
+  const station = `e2e-play-${Date.now()}`;
+  await setLocations(page, {
+    [station]: { latitude: 31.2304, longitude: 121.4737 },
+  });
+  await seedStation(request, station, 6);
 
-  await expect(page.getByText("31.2304, 121.4737")).toBeVisible();
-  const map = page.getByTitle("站点 station-01 位置地图");
-  await expect(map).toBeVisible();
-  await expect(map).toHaveAttribute("src", /marker=31\.2304,121\.4737/);
+  await page.goto(`/?station=${station}&view=map&range=24h`);
+  const slider = page.getByRole("slider", { name: "回放时间" });
+  await expect(slider).toBeVisible();
+  const before = await slider.inputValue();
+
+  await page.getByRole("button", { name: "播放回放" }).click();
+  await expect(page.getByRole("button", { name: "暂停回放" })).toBeVisible();
+  await page.waitForTimeout(800);
+  await expect(slider).not.toHaveValue(before);
+
+  await page.getByRole("button", { name: "暂停回放" }).click();
+  await slider.focus();
+  await slider.press("Home");
+  await expect(slider).toHaveValue("0");
+
+  await page.getByRole("button", { name: "现在" }).click();
+  await expect(slider).not.toHaveValue("0");
 });
 
-test("empty station shows an empty state", async ({ page }) => {
-  await page.goto(`/?station=e2e-empty-${Date.now()}`);
-  await expect(page.getByText("暂无历史数据")).toBeVisible();
-  await expect(page.getByText("暂无数据")).toBeVisible();
+test("location dialog saves coordinates and reveals the station marker", async ({
+  page,
+  request,
+}) => {
+  await mockMap(page);
+  const station = `e2e-locate-${Date.now()}`;
+  await seedStation(request, station, 2);
+
+  await page.goto(`/?station=${station}&view=map`);
+  await expect(page.locator(".map-empty")).toBeVisible();
+  await page.locator(".map-empty").getByRole("button", { name: "设置位置" }).click();
+
+  await page.getByLabel("纬度").fill("31.2304");
+  await page.getByLabel("经度").fill("121.4737");
+  await page.getByRole("button", { name: "保存" }).click();
+
+  await expect(page.getByRole("status")).toContainText("已保存");
+  await expect(page.locator(`.station-marker[data-station="${station}"]`)).toBeVisible();
+  await expect(page).toHaveURL(/lat=31\.23040/);
+});
+
+test("mobile station view is a dedicated page without map overlays", async ({ page, request }) => {
+  await mockMap(page);
+  const station = `e2e-mobile-${Date.now()}`;
+  await setLocations(page, {
+    [station]: { latitude: 31.2304, longitude: 121.4737 },
+  });
+  await seedStation(request, station, 4);
+  await page.setViewportSize({ width: 375, height: 812 });
+
+  await page.goto(`/?station=${station}&view=station`);
+  await expect(page.locator(".station-page")).toBeVisible();
+  await expect(page.locator(".maplibregl-canvas")).toHaveCount(0);
+  await expect(page.locator(".layer-rail--horizontal")).toBeVisible();
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - window.innerWidth,
+  );
+  expect(overflow).toBeLessThanOrEqual(0);
+
+  await page.getByRole("button", { name: "返回地图" }).first().click();
+  await expect(page.locator(".maplibregl-canvas")).toBeVisible();
+});
+
+test("forecast layers stay disabled until a model provider is connected", async ({
+  page,
+  request,
+}) => {
+  await mockMap(page);
+  const station = `e2e-forecast-${Date.now()}`;
+  await setLocations(page, {
+    [station]: { latitude: 31.2304, longitude: 121.4737 },
+  });
+  await seedStation(request, station, 2);
+
+  await page.goto(`/?station=${station}&view=map`);
+  await expect(page.getByRole("button", { name: "降水" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "云" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "气压" })).toBeDisabled();
 });

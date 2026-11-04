@@ -3,6 +3,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
 import "@microclimate/ui/styles.css";
+import "maplibre-gl/dist/maplibre-gl.css";
 import "./app.css";
 import { App } from "./App";
 

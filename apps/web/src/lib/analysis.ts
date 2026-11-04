@@ -32,6 +32,7 @@ export interface AnalysisPoint {
   dewPoint: number | null;
   thi: number | null;
   windSpeed: number | null;
+  windDirection: number | null;
   co2: number | null;
   pm25: number | null;
   pm10: number | null;
@@ -311,6 +312,7 @@ export function toAnalysisPoints(
       dewPoint: temperature !== null && humidity !== null ? dewPoint(temperature, humidity) : null,
       thi: temperature !== null && humidity !== null ? thi(temperature, humidity) : null,
       windSpeed: finiteOrNull(row.wind_speed),
+      windDirection: finiteOrNull(row.wind_direction),
       co2: finiteOrNull(row.co2),
       pm25: finiteOrNull(row.pm25),
       pm10: finiteOrNull(row.pm10),

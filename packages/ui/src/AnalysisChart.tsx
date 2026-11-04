@@ -62,18 +62,18 @@ export function AnalysisChart({ points, series, ariaLabel, height = 300 }: Analy
                 </linearGradient>
               ))}
           </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" vertical={false} />
           <XAxis
             dataKey="label"
             minTickGap={40}
-            tick={{ fontSize: 11, fill: "#64748b" }}
+            tick={{ fontSize: 11, fill: "var(--chart-axis)" }}
             tickLine={false}
           />
           <YAxis
             yAxisId="left"
             width={48}
             domain={leftDomain ?? ["auto", "auto"]}
-            tick={{ fontSize: 11, fill: "#64748b" }}
+            tick={{ fontSize: 11, fill: "var(--chart-axis)" }}
             tickLine={false}
             axisLine={false}
           />
@@ -83,27 +83,31 @@ export function AnalysisChart({ points, series, ariaLabel, height = 300 }: Analy
               orientation="right"
               width={48}
               domain={rightDomain ?? ["auto", "auto"]}
-              tick={{ fontSize: 11, fill: "#64748b" }}
+              tick={{ fontSize: 11, fill: "var(--chart-axis)" }}
               tickLine={false}
               axisLine={false}
             />
           ) : null}
           <Tooltip
             contentStyle={{
-              background: "#0b1f2a",
-              border: "none",
+              background: "var(--chart-tooltip-bg, #071318)",
+              border: "1px solid var(--chart-grid)",
               borderRadius: 12,
-              color: "#f8fafc",
+              color: "var(--chart-text, #f8fafc)",
               fontSize: 12,
               boxShadow: "0 12px 28px rgb(8 24 32 / 30%)",
             }}
-            itemStyle={{ color: "#e2e8f0" }}
-            labelStyle={{ color: "#94a3b8", marginBottom: 4 }}
+            itemStyle={{ color: "var(--chart-text, #e2e8f0)" }}
+            labelStyle={{ color: "var(--chart-axis)", marginBottom: 4 }}
             formatter={(value) =>
               typeof value === "number" && Number.isFinite(value) ? value.toFixed(1) : "—"
             }
           />
-          <Legend wrapperStyle={{ fontSize: 12, paddingTop: 4 }} iconType="circle" iconSize={8} />
+          <Legend
+            wrapperStyle={{ fontSize: 12, paddingTop: 4, color: "var(--chart-axis)" }}
+            iconType="circle"
+            iconSize={8}
+          />
           {series.map((item) =>
             item.kind === "area" ? (
               <Area

@@ -33,14 +33,14 @@ export function ComfortScatter({ points, ariaLabel = "温湿度舒适度分布�
     <div className="comfort-scatter" role="img" aria-label={ariaLabel}>
       <ResponsiveContainer width="100%" height={280}>
         <ScatterChart margin={{ top: 8, right: 12, bottom: 4, left: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
           <XAxis
             type="number"
             dataKey="temperature"
             name="温度"
             unit="°C"
             domain={[Math.floor(minTemperature - 1), Math.ceil(maxTemperature + 1)]}
-            tick={{ fontSize: 11, fill: "#64748b" }}
+            tick={{ fontSize: 11, fill: "var(--chart-axis)" }}
             tickLine={false}
             axisLine={false}
           />
@@ -50,7 +50,7 @@ export function ComfortScatter({ points, ariaLabel = "温湿度舒适度分布�
             name="湿度"
             unit="%"
             domain={[0, 100]}
-            tick={{ fontSize: 11, fill: "#64748b" }}
+            tick={{ fontSize: 11, fill: "var(--chart-axis)" }}
             tickLine={false}
             axisLine={false}
             width={44}
@@ -66,19 +66,19 @@ export function ComfortScatter({ points, ariaLabel = "温湿度舒适度分布�
             stroke="#10b981"
             strokeOpacity={0.35}
             strokeDasharray="4 4"
-            label={{ value: "舒适区", position: "insideTopLeft", fill: "#047857", fontSize: 11 }}
+            label={{ value: "舒适区", position: "insideTopLeft", fill: "#34d399", fontSize: 11 }}
           />
           <Tooltip
-            cursor={{ strokeDasharray: "3 3", stroke: "#94a3b8" }}
+            cursor={{ strokeDasharray: "3 3", stroke: "var(--chart-axis)" }}
             contentStyle={{
-              background: "#0b1f2a",
-              border: "none",
+              background: "var(--chart-tooltip-bg, #071318)",
+              border: "1px solid var(--chart-grid)",
               borderRadius: 12,
-              color: "#f8fafc",
+              color: "var(--chart-text, #f8fafc)",
               fontSize: 12,
             }}
-            itemStyle={{ color: "#e2e8f0" }}
-            labelStyle={{ color: "#94a3b8" }}
+            itemStyle={{ color: "var(--chart-text, #e2e8f0)" }}
+            labelStyle={{ color: "var(--chart-axis)" }}
             formatter={(value, name) =>
               typeof value === "number" && Number.isFinite(value)
                 ? [`${value.toFixed(1)}${name === "湿度" ? "%" : "°C"}`, name]

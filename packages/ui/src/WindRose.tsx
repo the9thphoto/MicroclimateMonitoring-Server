@@ -74,7 +74,7 @@ export function WindRose({ bins, size = 240 }: WindRoseProps) {
             cy={center}
             r={radius * fraction}
             fill="none"
-            stroke="#e2e8f0"
+            stroke="var(--chart-grid)"
             strokeDasharray={fraction === 1 ? undefined : "3 4"}
           />
         ))}
@@ -87,7 +87,7 @@ export function WindRose({ bins, size = 240 }: WindRoseProps) {
               y1={center}
               x2={end.x}
               y2={end.y}
-              stroke="#e2e8f0"
+              stroke="var(--chart-grid)"
               strokeDasharray="2 4"
             />
           );
@@ -128,7 +128,13 @@ export function WindRose({ bins, size = 240 }: WindRoseProps) {
             </text>
           );
         })}
-        <circle cx={center} cy={center} r={26} fill="#ffffff" stroke="#e2e8f0" />
+        <circle
+          cx={center}
+          cy={center}
+          r={26}
+          fill="var(--panel, #0b1f2a)"
+          stroke="var(--chart-grid)"
+        />
         <text x={center} y={center - 4} textAnchor="middle" className="wind-rose__total">
           {total}
         </text>

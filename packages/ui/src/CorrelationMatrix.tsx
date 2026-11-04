@@ -29,12 +29,12 @@ function mix(from: string, to: string, ratio: number): string {
 
 function cellStyle(value: number | null): { background: string; color: string } {
   if (value === null) {
-    return { background: "#f8fafc", color: "#94a3b8" };
+    return { background: "var(--chart-cell-empty, #0f172a)", color: "var(--chart-axis)" };
   }
   const strength = Math.min(1, Math.abs(value));
   const background =
-    value >= 0 ? mix("#f8fafc", "#dc2626", strength) : mix("#f8fafc", "#2563eb", strength);
-  return { background, color: strength > 0.55 ? "#ffffff" : "#334155" };
+    value >= 0 ? mix("#0f172a", "#ef4444", strength) : mix("#0f172a", "#3b82f6", strength);
+  return { background, color: strength > 0.2 ? "#ffffff" : "var(--chart-axis)" };
 }
 
 export function CorrelationMatrix({ metrics, values }: CorrelationMatrixProps) {
@@ -79,7 +79,7 @@ export function CorrelationMatrix({ metrics, values }: CorrelationMatrixProps) {
       </div>
       <div className="correlation__legend" aria-hidden="true">
         <span>-1</span>
-        <i style={{ background: "linear-gradient(90deg, #2563eb, #f8fafc, #dc2626)" }} />
+        <i style={{ background: "linear-gradient(90deg, #3b82f6, #0f172a, #ef4444)" }} />
         <span>+1</span>
         <span className="correlation__legend-note">蓝负红正</span>
       </div>

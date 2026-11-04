@@ -74,6 +74,33 @@ export function saveStoredLocation(station: string, location: StationLocation | 
   }
 }
 
+export function allStoredLocations(): Record<string, StationLocation> {
+  const result: Record<string, StationLocation> = {};
+  try {
+    for (let index = 0; index < window.localStorage.length; index += 1) {
+      const key = window.localStorage.key(index);
+      if (!key?.startsWith(STORAGE_PREFIX)) {
+        continue;
+      }
+      const station = key.slice(STORAGE_PREFIX.length);
+      const location = storedLocation(station);
+      if (location) {
+        result[station] = location;
+      }
+    }
+  } catch {
+    return result;
+  }
+  return result;
+}
+
+export function formatCoordinates(location: StationLocation | null): string {
+  if (!location) {
+    return "未配置坐标";
+  }
+  return `${location.latitude.toFixed(4)}, ${location.longitude.toFixed(4)}`;
+}
+
 export function locationSearch(search: string, location: StationLocation | null): string {
   const params = new URLSearchParams(search);
   if (location === null) {

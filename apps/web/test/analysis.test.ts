@@ -51,6 +51,7 @@ function point(time: number, temperature: number, humidity: number): AnalysisPoi
     dewPoint: dewPoint(temperature, humidity),
     thi: thi(temperature, humidity),
     windSpeed: null,
+    windDirection: null,
     co2: null,
     pm25: null,
     pm10: null,

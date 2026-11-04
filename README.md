@@ -1,6 +1,6 @@
 # 校园微气候监测后端
 
-基于 Go 与 TypeScript 的 monorepo：Go API 接收并保存监测站数据，React 气象分析面板展示当前观测、趋势、温湿日历、分时分布、相关矩阵、风玫瑰与站点地图。设备固件仍通过 HTTP 直接上报。
+基于 Go 与 TypeScript 的 monorepo：Go API 接收并保存监测站数据，React 地图工作台以站点、图层和回放为核心，并提供独立的分析工作台。设备固件仍通过 HTTP 直接上报。
 
 ```text
 ESP32-C3 (C/ESP-IDF, 独立仓库)
@@ -28,10 +28,10 @@ apps/web (React 19 + Vite 8) ◄── nginx（生产）或 Vite 代理（开发
 | `apps/api/internal/measurement/postgres` | Repository 的 pgx 实现 |
 | `apps/api/internal/httpapi` | Huma 路由、DTO、错误映射 |
 | `apps/api/internal/middleware` | CORS、请求日志、recover、body limit |
-| `apps/web` | 页面组装、查询 hooks、Playwright E2E |
+| `apps/web` | 地图工作台、图层/时间回放、分析页、Playwright E2E |
 | `packages/contracts` | OpenAPI JSON、生成的 TS 类型、API 常量 |
 | `packages/api-client` | 类型化客户端、分页与错误归一化 |
-| `packages/ui` | 纯展示组件、图表、样式 |
+| `packages/ui` | 深色图表原语、表格与展示组件 |
 | `packages/config` | 共享 TypeScript / Biome 配置 |
 | `packages/contracts/openapi.json` | Go 端生成的唯一契约来源 |
 
@@ -61,7 +61,7 @@ make api        # 终端 1：http://127.0.0.1:8000
 pnpm dev        # 终端 2：http://127.0.0.1:5173
 ```
 
-气象分析面板不向后端写坐标。需要默认站点位置时，在 `apps/web/.env` 设置 `VITE_STATION_LAT` / `VITE_STATION_LON`；也可用 `?lat=&lon=` 或页面内表单覆盖。优先级为 URL、浏览器本地设置、构建变量。地图底图来自 OpenStreetMap，需要联网。
+Web 端默认使用无 Key 的 OpenFreeMap 深色底图；可在 `apps/web/.env` 设置 `VITE_MAP_STYLE_URL` 指向自托管样式，适配离线或仅内网环境。站点坐标不进入后端：默认值可通过 `VITE_STATION_LAT` / `VITE_STATION_LON` 配置，也可用 `?lat=&lon=` 或页面内位置对话框覆盖；优先级为 URL、浏览器本地设置、构建变量。地图底图需要联网，瓦片失败时仍保留站点标记与时间轴。预报模型接入契约见 [docs/FORECAST.md](docs/FORECAST.md)。
 
 API 启动时会在 advisory lock 内自动执行 goose 迁移，空库会直接建表。也可以手动执行：
 

@@ -1,243 +1,453 @@
 import { ApiError } from "@microclimate/api-client";
-import { ErrorBanner, formatTime, MeasurementsTable, RangeTabs } from "@microclimate/ui";
-import { type FormEvent, useMemo, useState } from "react";
+import { DEFAULT_STATION_ID } from "@microclimate/contracts";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 
-import { BoxPlotPanel } from "./components/BoxPlotPanel";
-import { ComfortPanel } from "./components/ComfortPanel";
-import { CorrelationPanel } from "./components/CorrelationPanel";
-import { CurrentConditions } from "./components/CurrentConditions";
-import { DataQualityPanel } from "./components/DataQualityPanel";
-import { DiurnalPanel } from "./components/DiurnalPanel";
-import { EnvironmentPanel } from "./components/EnvironmentPanel";
-import { HeatmapPanel } from "./components/HeatmapPanel";
-import { StationMapPanel } from "./components/StationMapPanel";
-import { SummaryCards } from "./components/SummaryCards";
-import { TrendPanel } from "./components/TrendPanel";
+import { AnalysisView } from "./features/analysis/AnalysisView";
+import { LayerRail } from "./features/layers/LayerRail";
+import type { MapStationMarker } from "./features/map/MapFallback";
+import { TopBar } from "./features/shell/TopBar";
+import { LocationDialog } from "./features/station/LocationDialog";
+import { StationPanel } from "./features/station/StationPanel";
+import { StationPicker } from "./features/station/StationPicker";
+import { StationView } from "./features/station/StationView";
+import { TimelineDock } from "./features/timeline/TimelineDock";
+
+const MapView = lazy(() =>
+  import("./features/map/MapView").then((module) => ({ default: module.MapView })),
+);
+
 import { useHistory } from "./hooks/useHistory";
 import { useLatest } from "./hooks/useLatest";
+import { useMediaQuery } from "./hooks/useMediaQuery";
+import { useStationDirectory } from "./hooks/useStationDirectory";
+import { useTimeline } from "./hooks/useTimeline";
+import { dataQuality, toAnalysisPoints } from "./lib/analysis";
+import { DEFAULT_LAYER, LAYERS, type LayerId, layerById } from "./lib/layers";
 import {
-  dataQuality,
-  diurnalInsight,
-  environmentSnapshot,
-  hourlyProfile,
-  summarizeMetric,
-  toAnalysisPoints,
-  windRose,
-} from "./lib/analysis";
-import { isRangeKey, RANGE_OPTIONS, type RangeKey } from "./lib/ranges";
-import { stationFromSearch, stationSearch } from "./lib/station";
+  allStoredLocations,
+  defaultLocation,
+  formatCoordinates,
+  locationFromSearch,
+  locationSearch,
+  type StationLocation,
+  saveStoredLocation,
+} from "./lib/location";
+import { RANGE_OPTIONS } from "./lib/ranges";
+import {
+  type AppUrlState,
+  appStateFromSearch,
+  appStateSearch,
+  type ViewMode,
+} from "./lib/urlState";
 
-function errorMessage(error: Error): string {
-  if (error instanceof ApiError) {
-    return `${error.status}: ${error.detail}`;
+function errorMessage(error: Error | null): string | null {
+  if (!error) {
+    return null;
   }
-  return "无法加载数据，请检查 API 与数据库连接。";
+  if (error instanceof ApiError) {
+    return `服务返回 ${error.status}：${error.detail}`;
+  }
+  return "无法连接 API，请检查网络或数据库。";
 }
 
 export function App() {
-  const [station, setStation] = useState(() => stationFromSearch(window.location.search));
-  const [draft, setDraft] = useState(station);
-  const [range, setRange] = useState<RangeKey>("24h");
+  const [state, setState] = useState<AppUrlState>(() =>
+    appStateFromSearch(window.location.search, DEFAULT_STATION_ID),
+  );
+  const [locations, setLocations] = useState<Record<string, StationLocation>>(() => {
+    const stored = allStoredLocations();
+    const urlLocation = locationFromSearch(window.location.search);
+    const station = appStateFromSearch(window.location.search, DEFAULT_STATION_ID).station;
+    if (urlLocation) {
+      stored[station] = urlLocation;
+    }
+    const fallback = defaultLocation();
+    if (!stored[station] && fallback) {
+      stored[station] = fallback;
+    }
+    return stored;
+  });
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [locationOpen, setLocationOpen] = useState(false);
+  const [pickMode, setPickMode] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const isMobile = useMediaQuery("(max-width: 700px)");
 
-  const latest = useLatest(station);
-  const history = useHistory(station, range);
+  const latest = useLatest(state.station);
+  const history = useHistory(state.station, state.range);
+  const directory = useStationDirectory();
+
+  const rangeOption =
+    RANGE_OPTIONS.find((option) => option.key === state.range) ?? RANGE_OPTIONS[2]!;
+  const rangeMs = rangeOption.milliseconds;
   const rows = useMemo(() => history.data ?? [], [history.data]);
-  const rangeOption = RANGE_OPTIONS.find((option) => option.key === range) ?? RANGE_OPTIONS[2];
-  const rangeMs = rangeOption?.milliseconds ?? 24 * 60 * 60 * 1000;
-  const rangeLabel = rangeOption?.label ?? "24 小时";
-
   const allPoints = useMemo(
     () => toAnalysisPoints(rows, rangeMs, Math.max(rows.length, 1)),
     [rows, rangeMs],
   );
   const chartPoints = useMemo(() => toAnalysisPoints(rows, rangeMs), [rows, rangeMs]);
-  const temperature = useMemo(() => summarizeMetric(allPoints, "temperature"), [allPoints]);
-  const humidity = useMemo(() => summarizeMetric(allPoints, "humidity"), [allPoints]);
-  const thi = useMemo(() => summarizeMetric(allPoints, "thi"), [allPoints]);
-  const profile = useMemo(() => hourlyProfile(allPoints), [allPoints]);
-  const insight = useMemo(() => diurnalInsight(profile), [profile]);
-  const snapshot = useMemo(() => environmentSnapshot(rows), [rows]);
+  const latestPoint = useMemo(
+    () => (latest.data ? (toAnalysisPoints([latest.data], rangeMs, 1)[0] ?? null) : null),
+    [latest.data, rangeMs],
+  );
+  const activeLayer = layerById(state.layer);
+  const timeline = useTimeline(chartPoints, state.station, state.range);
+  const selected = timeline.selected ?? latestPoint;
   const quality = useMemo(() => dataQuality(rows, rangeMs), [rows, rangeMs]);
-  const windBins = useMemo(() => windRose(rows), [rows]);
-  const temperatureSeries = useMemo(() => allPoints.map((point) => point.temperature), [allPoints]);
-  const humiditySeries = useMemo(() => allPoints.map((point) => point.humidity), [allPoints]);
-  const thiSeries = useMemo(() => allPoints.map((point) => point.thi), [allPoints]);
-  const error = latest.error ?? history.error;
-  const isRefreshing = latest.isFetching || history.isFetching;
-  const updatedAt = latest.data?.observed_at ?? null;
 
-  const applyStation = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const next = draft.trim();
-    if (!next) {
+  const availability = useMemo(() => {
+    const source = allPoints.length > 0 ? allPoints : latestPoint ? [latestPoint] : [];
+    return Object.fromEntries(
+      LAYERS.map((layer) => [layer.id, source.length > 0 && layer.available(source)]),
+    ) as Record<LayerId, boolean>;
+  }, [allPoints, latestPoint]);
+
+  const updateState = useCallback(
+    (patch: Partial<AppUrlState>, options: { clearLocation?: boolean } = {}) => {
+      setState((previous) => ({ ...previous, ...patch }));
+      const search = appStateSearch(window.location.search, patch, options);
+      window.history.replaceState(null, "", `${window.location.pathname}${search}`);
+    },
+    [],
+  );
+
+  const selectStation = useCallback(
+    (stationId: string) => {
+      const nextView: ViewMode = state.view === "analysis" ? "analysis" : "station";
+      updateState({ station: stationId, view: nextView }, { clearLocation: true });
+      setPickerOpen(false);
+      setLocationOpen(false);
+    },
+    [state.view, updateState],
+  );
+
+  const saveLocation = useCallback(
+    (location: StationLocation) => {
+      setLocations((previous) => ({ ...previous, [state.station]: location }));
+      saveStoredLocation(state.station, location);
+      setLocationOpen(false);
+      setPickMode(false);
+      setToast(`已保存 ${state.station} 的位置：${formatCoordinates(location)}`);
+      const search = locationSearch(window.location.search, location);
+      window.history.replaceState(null, "", `${window.location.pathname}${search}`);
+    },
+    [state.station],
+  );
+
+  const clearLocation = useCallback(() => {
+    setLocations((previous) => {
+      const next = { ...previous };
+      delete next[state.station];
+      return next;
+    });
+    saveStoredLocation(state.station, null);
+    setLocationOpen(false);
+    setToast(`已清除 ${state.station} 的位置`);
+    const search = locationSearch(window.location.search, null);
+    window.history.replaceState(null, "", `${window.location.pathname}${search}`);
+  }, [state.station]);
+
+  const selectLayer = useCallback(
+    (layer: LayerId) => {
+      updateState({ layer });
+    },
+    [updateState],
+  );
+
+  const openAnalysis = useCallback(() => updateState({ view: "analysis" }), [updateState]);
+  const openMap = useCallback(() => updateState({ view: "map" }), [updateState]);
+  const openData = useCallback(() => updateState({ view: "analysis", tab: "data" }), [updateState]);
+  const openPicker = useCallback(() => setPickerOpen(true), []);
+  const closePicker = useCallback(() => setPickerOpen(false), []);
+  const openLocationDialog = useCallback(() => setLocationOpen(true), []);
+  const closeLocationDialog = useCallback(() => setLocationOpen(false), []);
+  const pickOnMap = useCallback(() => {
+    setLocationOpen(false);
+    setPickMode(true);
+  }, []);
+  const forecastNotice = useCallback(() => setToast("预报服务尚未接入，暂不显示预报场。"), []);
+
+  const error = latest.error ?? history.error ?? directory.error;
+  const message = errorMessage(error);
+  const offline = Boolean(error);
+  const focus = locations[state.station] ?? null;
+
+  const markers = useMemo(() => {
+    const result: MapStationMarker[] = [];
+    const seen = new Set<string>();
+    const snapshots = directory.data ?? [];
+
+    for (const snapshot of snapshots) {
+      const location = locations[snapshot.stationId];
+      if (!location) {
+        continue;
+      }
+      const isSelected = snapshot.stationId === state.station;
+      const point = isSelected
+        ? selected
+        : (toAnalysisPoints([snapshot.latest], rangeMs, 1)[0] ?? null);
+      result.push({
+        stationId: snapshot.stationId,
+        location,
+        value: point ? activeLayer.valueOf(point) : null,
+        direction: point?.windDirection ?? null,
+        selected: isSelected,
+      });
+      seen.add(snapshot.stationId);
+    }
+
+    if (!seen.has(state.station) && focus) {
+      result.push({
+        stationId: state.station,
+        location: focus,
+        value: selected ? activeLayer.valueOf(selected) : null,
+        direction: selected?.windDirection ?? null,
+        selected: true,
+      });
+    }
+    return result;
+  }, [directory.data, locations, state.station, selected, activeLayer, focus, rangeMs]);
+
+  const stationOptions = useMemo(() => {
+    const options = directory.data ?? [];
+    if (!latest.data || options.some((item) => item.stationId === state.station)) {
+      return options;
+    }
+    return [...options, { stationId: state.station, latest: latest.data }];
+  }, [directory.data, latest.data, state.station]);
+
+  useEffect(() => {
+    if (!toast) {
       return;
     }
-    setStation(next);
-    const search = stationSearch(window.location.search, next);
-    window.history.replaceState(null, "", `${window.location.pathname}${search}`);
-  };
+    const timer = window.setTimeout(() => setToast(null), 2800);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
+
+  useEffect(() => {
+    if (!pickMode) {
+      return;
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setPickMode(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [pickMode]);
+
+  useEffect(() => {
+    if (!offline) {
+      return;
+    }
+    setPickMode(false);
+  }, [offline]);
+
+  useEffect(() => {
+    if (!allPoints.length) {
+      return;
+    }
+    if (state.layer !== DEFAULT_LAYER && !layerById(state.layer).available(allPoints)) {
+      updateState({ layer: DEFAULT_LAYER });
+    }
+  }, [allPoints, state.layer, updateState]);
+
+  useEffect(() => {
+    const onPopState = () => {
+      const next = appStateFromSearch(window.location.search, DEFAULT_STATION_ID);
+      setState(next);
+      const urlLocation = locationFromSearch(window.location.search);
+      if (urlLocation) {
+        setLocations((previous) => ({ ...previous, [next.station]: urlLocation }));
+      }
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
 
   const retry = () => {
     void latest.refetch();
     void history.refetch();
+    void directory.refetch();
   };
 
-  return (
-    <div className="app">
-      <header className="app__header">
-        <div className="app__brand">
-          <span className="app__logo" aria-hidden="true">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              role="presentation"
-            >
-              <path d="M4 8h9a2.5 2.5 0 1 0-2.4-3.2" strokeLinecap="round" />
-              <path d="M3 12h13a2.5 2.5 0 1 1-2.4 3.2" strokeLinecap="round" />
-              <path d="M5 16h5" strokeLinecap="round" />
-            </svg>
-          </span>
-          <div>
-            <p className="app__eyebrow">Campus Microclimate</p>
-            <h1>气象分析面板</h1>
-            <p className="app__subtitle">校园微气候观测 · {station}</p>
-          </div>
-        </div>
+  const handleTimelineIndex = (index: number) => {
+    timeline.stop();
+    timeline.setIndex(index);
+  };
 
-        <div className="app__controls">
-          <form className="station-form" onSubmit={applyStation}>
-            <label htmlFor="station">站点</label>
-            <input
-              id="station"
-              name="station"
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              placeholder="station-01"
-              autoComplete="off"
-            />
-            <button type="submit">应用</button>
-          </form>
-          <button
-            type="button"
-            className="refresh-button"
-            onClick={retry}
-            disabled={isRefreshing}
-            aria-label="刷新数据"
-          >
-            <span
-              className={isRefreshing ? "refresh-button__icon is-spinning" : "refresh-button__icon"}
-              aria-hidden="true"
-            >
-              ↻
-            </span>
-            {isRefreshing ? "刷新中" : "刷新"}
-          </button>
-        </div>
-      </header>
+  const handleRange = (range: AppUrlState["range"]) => {
+    timeline.stop();
+    updateState({ range });
+  };
 
-      {error ? <ErrorBanner message={errorMessage(error)} onRetry={retry} /> : null}
+  const stationHeader = (
+    <TopBar
+      station={state.station}
+      view={state.view}
+      layerLabel={activeLayer.label}
+      point={selected}
+      loading={latest.isLoading || history.isLoading}
+      offline={offline}
+      onOpenSearch={openPicker}
+      onOpenLocation={openLocationDialog}
+      onOpenAnalysis={openAnalysis}
+      onBackToMap={openMap}
+    />
+  );
 
-      <CurrentConditions
-        station={station}
-        measurement={latest.data ?? null}
-        loading={latest.isLoading}
-      />
-
-      <div className="analysis-bar">
-        <div className="analysis-bar__info">
-          <h2>分析区间</h2>
-          <p aria-live="polite">
-            {rangeLabel} · {rows.length} 条记录 ·{" "}
-            {updatedAt
-              ? `更新于 ${formatTime(updatedAt)}`
-              : latest.isLoading
-                ? "读取中"
-                : "等待数据"}
-          </p>
-        </div>
-        <div className="analysis-bar__actions">
-          <span className="live-pill">
-            <span className="status-dot" aria-hidden="true" />
-            60 秒自动刷新
-          </span>
-          <RangeTabs
-            options={RANGE_OPTIONS.map(({ key, label }) => ({ key, label }))}
-            value={range}
-            onChange={(key) => {
-              if (isRangeKey(key)) {
-                setRange(key);
-              }
-            }}
-          />
-        </div>
-      </div>
-
-      {allPoints.length > 0 ? (
-        <SummaryCards
-          temperature={temperature}
-          humidity={humidity}
-          thi={thi}
-          temperatureSeries={temperatureSeries}
-          humiditySeries={humiditySeries}
-          thiSeries={thiSeries}
-          samples={rows.length}
-          rangeLabel={rangeLabel}
+  if (state.view === "analysis") {
+    return (
+      <div className="app-shell app-shell--analysis">
+        <AnalysisView
+          station={state.station}
+          range={state.range}
+          tab={state.tab}
+          rows={rows}
+          points={allPoints}
+          chartPoints={chartPoints}
+          quality={quality}
+          onBack={openMap}
+          onPickStation={openPicker}
+          onRangeChange={(range) => updateState({ range })}
+          onTabChange={(tab) => updateState({ tab })}
         />
-      ) : null}
-
-      <TrendPanel
-        station={station}
-        points={chartPoints}
-        statsPoints={allPoints}
-        loading={history.isLoading}
-      />
-
-      {allPoints.length > 0 ? <HeatmapPanel points={allPoints} /> : null}
-
-      {allPoints.length > 0 ? (
-        <div className="analysis-grid">
-          {profile.length >= 2 && insight ? (
-            <DiurnalPanel profile={profile} insight={insight} />
-          ) : null}
-          <ComfortPanel points={chartPoints} />
-        </div>
-      ) : null}
-
-      {allPoints.length > 0 ? (
-        <div className="analysis-grid">
-          <BoxPlotPanel points={allPoints} />
-          <CorrelationPanel points={allPoints} />
-        </div>
-      ) : null}
-
-      <div className="analysis-grid">
-        <StationMapPanel key={station} station={station} />
-        {allPoints.length > 0 ? (
-          <DataQualityPanel quality={quality} rangeLabel={rangeLabel} />
+        <StationPicker
+          open={pickerOpen}
+          selected={state.station}
+          stations={stationOptions}
+          locations={locations}
+          onSelect={selectStation}
+          onClose={closePicker}
+        />
+        {message ? (
+          <div className="app-error" role="alert">
+            <span>{message}</span>
+            <button type="button" onClick={retry}>
+              重试
+            </button>
+          </div>
+        ) : null}
+        {toast ? (
+          <div className="toast" role="status">
+            {toast}
+          </div>
         ) : null}
       </div>
+    );
+  }
 
-      {allPoints.length > 0 ? <EnvironmentPanel snapshot={snapshot} windRose={windBins} /> : null}
+  const mobileStation = isMobile && state.view === "station";
 
-      {rows.length > 0 ? (
-        <section className="records" aria-labelledby="records-heading">
-          <div className="records__head">
-            <div>
-              <h2 id="records-heading">最近记录</h2>
-              <p className="panel__hint">按采集时间倒序，最多展示 20 条。</p>
-            </div>
-            <span className="panel__tag">原始观测</span>
+  return (
+    <div className="app-shell">
+      {stationHeader}
+
+      {mobileStation ? (
+        <StationView
+          station={state.station}
+          point={selected}
+          values={chartPoints}
+          layer={activeLayer}
+          quality={quality}
+          location={focus}
+          availability={availability}
+          onSelectLayer={selectLayer}
+          onForecast={forecastNotice}
+          onBack={openMap}
+          onOpenAnalysis={openAnalysis}
+          onOpenData={openData}
+          onOpenLocation={openLocationDialog}
+        />
+      ) : (
+        <>
+          <div className={state.view === "station" ? "workspace-main has-panel" : "workspace-main"}>
+            {state.view === "station" ? (
+              <StationPanel
+                station={state.station}
+                point={selected}
+                values={chartPoints}
+                layer={activeLayer}
+                quality={quality}
+                location={focus}
+                onClose={openMap}
+                onOpenAnalysis={openAnalysis}
+                onOpenData={openData}
+                onOpenLocation={openLocationDialog}
+              />
+            ) : null}
+            <Suspense fallback={<div className="map-loading">正在加载地图…</div>}>
+              <MapView
+                markers={markers}
+                activeLayer={activeLayer}
+                focus={focus}
+                mode={state.view === "station" ? "station" : "overview"}
+                pickMode={pickMode}
+                onSelectStation={selectStation}
+                onPickLocation={saveLocation}
+                onOpenLocation={openLocationDialog}
+              />
+            </Suspense>
+            <LayerRail
+              active={state.layer}
+              availability={availability}
+              onSelect={selectLayer}
+              onForecast={forecastNotice}
+            />
           </div>
-          <MeasurementsTable rows={rows.slice(0, 20)} />
-        </section>
+          <TimelineDock
+            points={chartPoints}
+            selectedIndex={timeline.index}
+            selected={selected}
+            layer={activeLayer}
+            range={state.range}
+            playing={timeline.playing}
+            speed={timeline.speed}
+            canPlay={timeline.canPlay}
+            onRangeChange={handleRange}
+            onSelectIndex={handleTimelineIndex}
+            onToggle={timeline.toggle}
+            onSpeedChange={timeline.setSpeed}
+            onToLatest={timeline.toLatest}
+            compact={isMobile}
+          />
+        </>
+      )}
+
+      {message ? (
+        <div className="app-error" role="alert">
+          <span>{message}</span>
+          <button type="button" onClick={retry}>
+            重试
+          </button>
+        </div>
+      ) : null}
+      {toast ? (
+        <div className="toast" role="status">
+          {toast}
+        </div>
       ) : null}
 
-      <footer className="app__footer">
-        <span>数据保存在 PostgreSQL，永久保留，不自动清理。</span>
-        <span>派生指标与可视化在浏览器内计算；未接入要素不推算。</span>
-      </footer>
+      <StationPicker
+        open={pickerOpen}
+        selected={state.station}
+        stations={stationOptions}
+        locations={locations}
+        onSelect={selectStation}
+        onClose={closePicker}
+      />
+
+      {locationOpen ? (
+        <LocationDialog
+          station={state.station}
+          initial={focus}
+          onSave={saveLocation}
+          onClear={clearLocation}
+          onPickOnMap={pickOnMap}
+          onClose={closeLocationDialog}
+        />
+      ) : null}
     </div>
   );
 }
