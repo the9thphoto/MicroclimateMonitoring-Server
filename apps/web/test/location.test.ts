@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  CAMPUS_LOCATION,
+  defaultLocation,
+  isCampusLocation,
   locationFromSearch,
   locationSearch,
   parseLatitude,
@@ -31,6 +34,13 @@ describe("station location", () => {
     const cleared = new URLSearchParams(locationSearch(search, null));
     expect(cleared.get("station")).toBe("station-02");
     expect(cleared.get("lat")).toBeNull();
+  });
+
+  it("defaults station-01 to the Nanjing Tech campus", () => {
+    expect(defaultLocation("station-01")).toEqual(CAMPUS_LOCATION);
+    expect(defaultLocation("other-station")).toBeNull();
+    expect(isCampusLocation(CAMPUS_LOCATION)).toBe(true);
+    expect(isCampusLocation({ latitude: 0, longitude: 0 })).toBe(false);
   });
 
   it("persists coordinates per station", () => {

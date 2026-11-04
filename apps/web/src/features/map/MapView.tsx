@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 import type { LayerDefinition } from "../../lib/layers";
 import { formatLayerValue, layerColor } from "../../lib/layers";
-import type { StationLocation } from "../../lib/location";
+import { CAMPUS_LOCATION, type StationLocation } from "../../lib/location";
 import { FitIcon, LocateIcon, MapPinIcon } from "../shell/icons";
 import { MapFallback, type MapStationMarker } from "./MapFallback";
 import { createFallbackStyle, MAP_STYLE_URL } from "./mapStyle";
@@ -27,8 +27,8 @@ interface MarkerHandle {
 
 maplibregl.setWorkerUrl(maplibreWorkerUrl);
 
-const INITIAL_CENTER: [number, number] = [105, 35];
-const INITIAL_ZOOM = 3.2;
+const INITIAL_CENTER: [number, number] = [CAMPUS_LOCATION.longitude, CAMPUS_LOCATION.latitude];
+const INITIAL_ZOOM = 14;
 
 function updateMarker(handle: MarkerHandle, data: MapStationMarker, activeLayer: LayerDefinition) {
   const { element } = handle;
@@ -118,7 +118,7 @@ export function MapView({
         container,
         style: MAP_STYLE_URL,
         center: initialFocus ? [initialFocus.longitude, initialFocus.latitude] : INITIAL_CENTER,
-        zoom: initialFocus ? 12 : INITIAL_ZOOM,
+        zoom: initialFocus ? 14 : INITIAL_ZOOM,
         attributionControl: false,
         dragRotate: false,
         pitchWithRotate: false,
@@ -183,7 +183,7 @@ export function MapView({
     }
     map.flyTo({
       center: [focus.longitude, focus.latitude],
-      zoom: Math.max(map.getZoom(), 12),
+      zoom: Math.max(map.getZoom(), 14),
       duration: 750,
       essential: true,
     });
@@ -252,7 +252,7 @@ export function MapView({
     }
     map.flyTo({
       center: [focus.longitude, focus.latitude],
-      zoom: Math.max(map.getZoom(), 12),
+      zoom: Math.max(map.getZoom(), 14),
       duration: 650,
     });
   };

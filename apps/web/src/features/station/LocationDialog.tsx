@@ -1,7 +1,9 @@
 import { type FormEvent, useEffect, useRef, useState } from "react";
 
 import {
+  CAMPUS_LABEL,
   formatCoordinates,
+  isCampusLocation,
   parseLatitude,
   parseLongitude,
   type StationLocation,
@@ -72,6 +74,7 @@ export function LocationDialog({
             <h2 id="location-title">设置站点位置</h2>
             <p>
               {station} · {formatCoordinates(initial)}
+              {isCampusLocation(initial) ? ` · ${CAMPUS_LABEL}` : ""}
             </p>
           </div>
           <button type="button" className="icon-button" onClick={onClose} aria-label="关闭位置设置">

@@ -63,6 +63,20 @@ pnpm dev        # 终端 2：http://127.0.0.1:5173
 
 Web 端默认使用无 Key 的 OpenFreeMap 深色底图；可在 `apps/web/.env` 设置 `VITE_MAP_STYLE_URL` 指向自托管样式，适配离线或仅内网环境。站点坐标不进入后端：默认值可通过 `VITE_STATION_LAT` / `VITE_STATION_LON` 配置，也可用 `?lat=&lon=` 或页面内位置对话框覆盖；优先级为 URL、浏览器本地设置、构建变量。地图底图需要联网，瓦片失败时仍保留站点标记与时间轴。预报模型接入契约见 [docs/FORECAST.md](docs/FORECAST.md)。
 
+### 本地模拟上报设备
+
+`station-01` 默认定位在南京工业大学江浦校区，可在页面内修改。让 simulator 按固件格式上报温湿度：
+
+```bash
+node scripts/simulate-device.mjs --count 5 --interval 2
+# 持续模拟，Ctrl-C 停止
+node scripts/simulate-device.mjs --count 0 --interval 60
+# 额外发送风、CO₂、PM2.5、PM10，便于检查全部图层
+node scripts/simulate-device.mjs --count 5 --optional
+```
+
+`--url` 和 `--station` 可覆盖默认的 `http://127.0.0.1:8000/api/v1/measurements` 与 `station-01`。
+
 API 启动时会在 advisory lock 内自动执行 goose 迁移，空库会直接建表。也可以手动执行：
 
 ```bash

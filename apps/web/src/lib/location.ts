@@ -5,6 +5,13 @@ export interface StationLocation {
 
 const STORAGE_PREFIX = "microclimate.location.";
 
+/** Main campus of Nanjing Tech University (Jiangpu campus). */
+export const CAMPUS_LOCATION: StationLocation = {
+  latitude: 32.0839058,
+  longitude: 118.6361144,
+};
+export const CAMPUS_LABEL = "南京工业大学（江浦校区）";
+
 function parseNumber(value: string | null | undefined, min: number, max: number): number | null {
   if (value === null || value === undefined || value.trim() === "") {
     return null;
@@ -24,10 +31,23 @@ export function parseLongitude(value: string | null | undefined): number | null 
   return parseNumber(value, -180, 180);
 }
 
-export function defaultLocation(): StationLocation | null {
+export function defaultLocation(station = "station-01"): StationLocation | null {
   const latitude = parseLatitude(import.meta.env.VITE_STATION_LAT);
   const longitude = parseLongitude(import.meta.env.VITE_STATION_LON);
-  return latitude !== null && longitude !== null ? { latitude, longitude } : null;
+  if (latitude !== null && longitude !== null) {
+    return { latitude, longitude };
+  }
+  return station === "station-01" ? CAMPUS_LOCATION : null;
+}
+
+export function isCampusLocation(location: StationLocation | null): boolean {
+  if (!location) {
+    return false;
+  }
+  return (
+    Math.abs(location.latitude - CAMPUS_LOCATION.latitude) < 0.0001 &&
+    Math.abs(location.longitude - CAMPUS_LOCATION.longitude) < 0.0001
+  );
 }
 
 export function locationFromSearch(search: string): StationLocation | null {

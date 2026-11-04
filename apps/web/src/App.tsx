@@ -61,7 +61,7 @@ export function App() {
     if (urlLocation) {
       stored[station] = urlLocation;
     }
-    const fallback = defaultLocation();
+    const fallback = defaultLocation(station);
     if (!stored[station] && fallback) {
       stored[station] = fallback;
     }
