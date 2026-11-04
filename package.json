@@ -2,6 +2,10 @@
   "name": "microclimate-monitor-server",
   "private": true,
   "packageManager": "pnpm@11.25.0",
+  "engines": {
+    "node": ">=26",
+    "pnpm": ">=11"
+  },
   "scripts": {
     "dev": "pnpm --filter @microclimate/web dev",
     "build": "pnpm --filter @microclimate/web build",

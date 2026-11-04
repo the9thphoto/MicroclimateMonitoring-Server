@@ -40,7 +40,7 @@ apps/web (React 19 + Vite 8) ◄── nginx（生产）或 Vite 代理（开发
 ## 环境要求
 
 - Go 1.27+
-- Node.js 22+、pnpm 11+
+- Node.js 26+、pnpm 11+
 - PostgreSQL 17+（本地安装或 Docker）
 - Docker 与 Docker Compose（容器部署/本地数据库）
 
@@ -48,6 +48,7 @@ apps/web (React 19 + Vite 8) ◄── nginx（生产）或 Vite 代理（开发
 
 ```bash
 cd server
+nvm use          # .nvmrc pins Node 26
 cp .env.example .env
 docker compose -f docker-compose.example.yml up -d db
 
