@@ -15,7 +15,6 @@ interface StationPanelProps {
   onClose: () => void;
   onOpenAnalysis: () => void;
   onOpenData: () => void;
-  onOpenLocation: () => void;
 }
 
 export function StationPanel({
@@ -28,7 +27,6 @@ export function StationPanel({
   onClose,
   onOpenAnalysis,
   onOpenData,
-  onOpenLocation,
 }: StationPanelProps) {
   return (
     <aside className="station-panel" aria-label={`${station} 站点详情`}>
@@ -57,11 +55,7 @@ export function StationPanel({
         />
       </div>
       <div className="station-panel__actions">
-        <StationActions
-          onOpenAnalysis={onOpenAnalysis}
-          onOpenData={onOpenData}
-          onOpenLocation={onOpenLocation}
-        />
+        <StationActions onOpenAnalysis={onOpenAnalysis} onOpenData={onOpenData} />
       </div>
     </aside>
   );

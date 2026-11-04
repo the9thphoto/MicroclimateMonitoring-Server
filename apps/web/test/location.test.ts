@@ -1,52 +1,19 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  CAMPUS_LOCATION,
-  defaultLocation,
-  isCampusLocation,
-  locationFromSearch,
-  locationSearch,
-  parseLatitude,
-  parseLongitude,
-  saveStoredLocation,
-  storedLocation,
-} from "../src/lib/location";
+import { CAMPUS_LOCATION, formatCoordinates, measurementLocation } from "../src/lib/location";
 
 describe("station location", () => {
-  it("parses and validates coordinates", () => {
-    expect(parseLatitude("31.2304")).toBe(31.2304);
-    expect(parseLatitude("91")).toBeNull();
-    expect(parseLatitude("")).toBeNull();
-    expect(parseLongitude("-121.4737")).toBe(-121.4737);
-    expect(parseLongitude("181")).toBeNull();
+  it("uses device-reported coordinates", () => {
+    expect(measurementLocation({ latitude: 32.0839058, longitude: 118.6361144 })).toEqual(
+      CAMPUS_LOCATION,
+    );
+    expect(measurementLocation({ latitude: null, longitude: null })).toBeNull();
+    expect(measurementLocation({ latitude: 91, longitude: 118.6 })).toBeNull();
+    expect(measurementLocation({ latitude: 32.08, longitude: 181 })).toBeNull();
   });
 
-  it("reads coordinates from the URL and keeps the station parameter", () => {
-    expect(locationFromSearch("?station=station-02&lat=31.2&lon=121.4")).toEqual({
-      latitude: 31.2,
-      longitude: 121.4,
-    });
-    const search = locationSearch("?station=station-02", { latitude: 31.2, longitude: 121.4 });
-    const params = new URLSearchParams(search);
-    expect(params.get("station")).toBe("station-02");
-    expect(params.get("lat")).toBe("31.20000");
-    expect(params.get("lon")).toBe("121.40000");
-    const cleared = new URLSearchParams(locationSearch(search, null));
-    expect(cleared.get("station")).toBe("station-02");
-    expect(cleared.get("lat")).toBeNull();
-  });
-
-  it("defaults station-01 to the Nanjing Tech campus", () => {
-    expect(defaultLocation("station-01")).toEqual(CAMPUS_LOCATION);
-    expect(defaultLocation("other-station")).toBeNull();
-    expect(isCampusLocation(CAMPUS_LOCATION)).toBe(true);
-    expect(isCampusLocation({ latitude: 0, longitude: 0 })).toBe(false);
-  });
-
-  it("persists coordinates per station", () => {
-    saveStoredLocation("station-test", { latitude: 30.5, longitude: 120.5 });
-    expect(storedLocation("station-test")).toEqual({ latitude: 30.5, longitude: 120.5 });
-    saveStoredLocation("station-test", null);
-    expect(storedLocation("station-test")).toBeNull();
+  it("formats coordinates and the missing state", () => {
+    expect(formatCoordinates(CAMPUS_LOCATION)).toBe("32.0839, 118.6361");
+    expect(formatCoordinates(null)).toBe("未上报坐标");
   });
 });

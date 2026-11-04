@@ -14,10 +14,7 @@ interface MapViewProps {
   activeLayer: LayerDefinition;
   focus: StationLocation | null;
   mode: "overview" | "station" | "forecast";
-  pickMode: boolean;
   onSelectStation: (stationId: string) => void;
-  onPickLocation: (location: StationLocation) => void;
-  onOpenLocation: () => void;
 }
 
 interface MarkerHandle {
@@ -80,30 +77,19 @@ function createMarkerElement(stationId: string, onSelect: (id: string) => void):
   return element;
 }
 
-export function MapView({
-  markers,
-  activeLayer,
-  focus,
-  mode,
-  pickMode,
-  onSelectStation,
-  onPickLocation,
-  onOpenLocation,
-}: MapViewProps) {
+export function MapView({ markers, activeLayer, focus, mode, onSelectStation }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markerHandles = useRef<Map<string, MarkerHandle>>(new Map());
-  const pickModeRef = useRef(pickMode);
-  const pickCallbackRef = useRef(onPickLocation);
   const selectCallbackRef = useRef(onSelectStation);
   const initialFocusRef = useRef(focus);
+  const hadFocusRef = useRef(Boolean(focus));
+  const initialFitRef = useRef(false);
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
   const [tileIssue, setTileIssue] = useState(false);
   const [styleFallback, setStyleFallback] = useState(false);
 
-  pickModeRef.current = pickMode;
-  pickCallbackRef.current = onPickLocation;
   selectCallbackRef.current = onSelectStation;
 
   useEffect(() => {
@@ -147,15 +133,6 @@ export function MapView({
       }
     }, 8000);
     map.once("style.load", () => window.clearTimeout(styleTimer));
-    map.on("click", (event: { lngLat: { lat: number; lng: number } }) => {
-      if (pickModeRef.current) {
-        pickCallbackRef.current({
-          latitude: event.lngLat.lat,
-          longitude: event.lngLat.lng,
-        });
-      }
-    });
-
     return () => {
       resizeObserver.disconnect();
       window.clearTimeout(styleTimer);
@@ -181,6 +158,7 @@ export function MapView({
     if (!map || !ready || !focus) {
       return;
     }
+    hadFocusRef.current = true;
     map.flyTo({
       center: [focus.longitude, focus.latitude],
       zoom: Math.max(map.getZoom(), 14),
@@ -191,10 +169,30 @@ export function MapView({
 
   useEffect(() => {
     const map = mapRef.current;
+    if (!map || !ready || focus || markers.length === 0) {
+      return;
+    }
+    if (!hadFocusRef.current && initialFitRef.current) {
+      return;
+    }
+    hadFocusRef.current = false;
+    initialFitRef.current = true;
+    const bounds = new maplibregl.LngLatBounds();
+    for (const marker of markers) {
+      bounds.extend([marker.location.longitude, marker.location.latitude]);
+    }
+    if (!bounds.isEmpty()) {
+      map.fitBounds(bounds, { padding: 70, maxZoom: 14, duration: 650 });
+    }
+  }, [focus, ready, markers]);
+
+  useEffect(() => {
+    const map = mapRef.current;
     if (!map || !ready || failed) {
       return;
     }
     const seen = new Set<string>();
+    const showNames = markers.length <= 8;
     for (const data of markers) {
       const { latitude, longitude } = data.location;
       if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
@@ -211,6 +209,7 @@ export function MapView({
         markerHandles.current.set(data.stationId, handle);
       }
       updateMarker(handle, data, activeLayer);
+      handle.element.classList.toggle("show-name", showNames);
       handle.marker.setLngLat([longitude, latitude]);
       handle.element.style.zIndex = data.selected ? "2" : "1";
     }
@@ -222,14 +221,6 @@ export function MapView({
       }
     }
   }, [markers, activeLayer, ready, failed]);
-
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) {
-      return;
-    }
-    map.getCanvas().style.cursor = pickMode ? "crosshair" : "";
-  }, [pickMode]);
 
   const fitAll = () => {
     const map = mapRef.current;
@@ -258,11 +249,7 @@ export function MapView({
   };
 
   return (
-    <div
-      className={["map-view", pickMode ? "is-picking" : "", styleFallback ? "is-fallback" : ""]
-        .filter(Boolean)
-        .join(" ")}
-    >
+    <div className={["map-view", styleFallback ? "is-fallback" : ""].filter(Boolean).join(" ")}>
       <div ref={containerRef} className="map-view__canvas" />
       {failed ? (
         <MapFallback
@@ -278,24 +265,15 @@ export function MapView({
             <MapPinIcon size={22} />
           </span>
           <div>
-            <strong>尚未设置站点坐标</strong>
-            <p>设置经纬度后，站点和图层才会出现在地图上。</p>
+            <strong>暂无站点上报坐标</strong>
+            <p>设备上报经纬度后，站点会自动出现在地图上。</p>
           </div>
-          <button type="button" onClick={onOpenLocation}>
-            设置位置
-          </button>
         </div>
       ) : null}
 
       {tileIssue && !failed ? (
         <div className="map-badge" role="status">
           底图离线 · 站点标记仍可用
-        </div>
-      ) : null}
-
-      {pickMode ? (
-        <div className="map-pick-hint" role="status">
-          点击地图设置站点位置 · Esc 取消
         </div>
       ) : null}
 

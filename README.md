@@ -61,11 +61,11 @@ make api        # 终端 1：http://127.0.0.1:8000
 pnpm dev        # 终端 2：http://127.0.0.1:5173
 ```
 
-Web 端默认使用无 Key 的 OpenFreeMap 深色底图；可在 `apps/web/.env` 设置 `VITE_MAP_STYLE_URL` 指向自托管样式，适配离线或仅内网环境。站点坐标不进入后端：默认值可通过 `VITE_STATION_LAT` / `VITE_STATION_LON` 配置，也可用 `?lat=&lon=` 或页面内位置对话框覆盖；优先级为 URL、浏览器本地设置、构建变量。地图底图需要联网，瓦片失败时仍保留站点标记与时间轴。预报模型接入契约见 [docs/FORECAST.md](docs/FORECAST.md)。
+Web 端默认使用无 Key 的 OpenFreeMap 深色底图；可在 `apps/web/.env` 设置 `VITE_MAP_STYLE_URL` 指向自托管样式，适配离线或仅内网环境。站点位置由固件随每条测量上报 `latitude` / `longitude`，地图使用每个站点最新一条观测的坐标；不再依赖浏览器 localStorage 或构建变量。地图底图需要联网；瓦片失败时仍保留站点标记、站点详情与时间轴。预报模型接入契约见 [docs/FORECAST.md](docs/FORECAST.md)。
 
 ### 本地模拟上报设备
 
-`station-01` 默认定位在南京工业大学江浦校区，可在页面内修改。让 simulator 按固件格式上报温湿度：
+`station-01` 固件默认坐标是南京工业大学江浦校区。让 simulator 按固件格式上报温湿度和位置：
 
 ```bash
 node scripts/simulate-device.mjs --count 5 --interval 2
@@ -75,7 +75,7 @@ node scripts/simulate-device.mjs --count 0 --interval 60
 node scripts/simulate-device.mjs --count 5 --optional
 ```
 
-`--url` 和 `--station` 可覆盖默认的 `http://127.0.0.1:8000/api/v1/measurements` 与 `station-01`。
+`--url`、`--station`、`--latitude`、`--longitude` 可覆盖默认值；模拟器默认发送校区坐标。
 
 API 启动时会在 advisory lock 内自动执行 goose 迁移，空库会直接建表。也可以手动执行：
 
@@ -104,16 +104,16 @@ make migrate-status   # 查看版本
 
 - `POST /api/v1/measurements`：上报一条聚合测量，返回 201。
 - `GET /api/v1/measurements`：按站点、时间范围分页查询，默认 100 条，最大 1000。
-- `GET /api/v1/measurements/latest`：最新一条，无数据返回 404。
+- `GET /api/v1/measurements/latest`：最新一条，无数据返回 404；最新记录的坐标用于地图定位。
 - `GET /health`：数据库可用时返回 `{"status":"ok"}`，否则 503。
 - `GET /openapi.json`、`GET /docs`：OpenAPI 3.1 文档。
 
-成功响应的字段与旧版本保持一致：可选的传感器字段在响应中始终存在，缺失时为 `null`。校验错误使用 RFC 9457 `application/problem+json`；非法 JSON（包括 `NaN`/`Infinity` 字面量）返回 400。
+响应中的可选传感器字段与坐标始终存在，缺失时为 `null`；`latitude` / `longitude` 由固件随测量上报。校验错误使用 RFC 9457 `application/problem+json`；非法 JSON（包括 `NaN`/`Infinity` 字面量）返回 400。
 
 设备示例（与固件一致）：
 
 ```json
-{"station_id":"station-01","temperature":21.6,"humidity":63.0,"observed_at":"2026-11-04T08:30:00Z"}
+{"station_id":"station-01","latitude":32.0839058,"longitude":118.6361144,"temperature":21.6,"humidity":63.0,"observed_at":"2026-11-04T08:30:00Z"}
 ```
 
 ## 数据库与迁移

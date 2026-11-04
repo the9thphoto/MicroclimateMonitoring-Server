@@ -20,6 +20,8 @@ const measurement: Measurement = {
   co2: null,
   pm25: null,
   pm10: null,
+  latitude: 32.0839058,
+  longitude: 118.6361144,
 };
 
 function jsonResponse(body: unknown, status = 200): Response {

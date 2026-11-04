@@ -14,6 +14,8 @@
 const options = {
   url: process.env.SIMULATOR_API_URL ?? "http://127.0.0.1:8000/api/v1/measurements",
   station: process.env.SIMULATOR_STATION ?? "station-01",
+  latitude: Number(process.env.SIMULATOR_LATITUDE ?? 32.0839058),
+  longitude: Number(process.env.SIMULATOR_LONGITUDE ?? 118.6361144),
   interval: 3,
   count: 5,
   optional: false,
@@ -26,6 +28,10 @@ for (let index = 0; index < argv.length; index += 1) {
     options.url = argv[++index] ?? options.url;
   } else if (arg === "--station") {
     options.station = argv[++index] ?? options.station;
+  } else if (arg === "--latitude") {
+    options.latitude = Number(argv[++index] ?? options.latitude);
+  } else if (arg === "--longitude") {
+    options.longitude = Number(argv[++index] ?? options.longitude);
   } else if (arg === "--interval") {
     options.interval = Number(argv[++index] ?? options.interval);
   } else if (arg === "--count") {
@@ -37,6 +43,8 @@ for (let index = 0; index < argv.length; index += 1) {
 
   --url <url>        API endpoint (default ${options.url})
   --station <id>     station_id (default ${options.station})
+  --latitude <deg>   device latitude (default ${options.latitude})
+  --longitude <deg>  device longitude (default ${options.longitude})
   --interval <sec>   seconds between reports (default ${options.interval})
   --count <n>        reports to send, 0 = until Ctrl-C (default ${options.count})
   --optional         include wind, CO2, PM2.5 and PM10 fields
@@ -60,6 +68,14 @@ if (!options.station.trim() || options.station.trim().length > 64) {
   console.error("--station must be 1-64 characters");
   process.exit(1);
 }
+if (!Number.isFinite(options.latitude) || options.latitude < -90 || options.latitude > 90) {
+  console.error("--latitude must be between -90 and 90");
+  process.exit(1);
+}
+if (!Number.isFinite(options.longitude) || options.longitude < -180 || options.longitude > 180) {
+  console.error("--longitude must be between -180 and 180");
+  process.exit(1);
+}
 
 const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 let interrupted = false;
@@ -79,6 +95,8 @@ function sample(index) {
   const phase = now / 1000;
   const payload = {
     station_id: options.station.trim(),
+    latitude: options.latitude,
+    longitude: options.longitude,
     observed_at: new Date(now).toISOString(),
     temperature: round(22 + 2.4 * Math.sin(phase / 140) + index * 0.03, 1),
     humidity: round(58 + 6 * Math.cos(phase / 170) - index * 0.05, 1),
@@ -109,7 +127,8 @@ while (!interrupted && (options.count === 0 || sent < options.count)) {
     sent += 1;
     console.log(
       `[${sent}] ${response.status} ${payload.station_id} ` +
-        `${payload.temperature} °C / ${payload.humidity} %` +
+        `${payload.temperature} °C / ${payload.humidity} % ` +
+        `@ ${payload.latitude},${payload.longitude}` +
         `${options.optional ? " / optional sensors" : ""}`,
     );
   } catch (error) {

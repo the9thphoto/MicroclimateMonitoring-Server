@@ -26,6 +26,8 @@ type measurementBody struct {
 	CO2           *float64   `json:"co2" required:"false" minimum:"0" maximum:"100000" doc:"二氧化碳 ppm"`
 	PM25          *float64   `json:"pm25" required:"false" minimum:"0" maximum:"10000" doc:"PM2.5 μg/m³"`
 	PM10          *float64   `json:"pm10" required:"false" minimum:"0" maximum:"10000" doc:"PM10 μg/m³"`
+	Latitude      *float64   `json:"latitude" required:"false" minimum:"-90" maximum:"90" doc:"设备纬度"`
+	Longitude     *float64   `json:"longitude" required:"false" minimum:"-180" maximum:"180" doc:"设备经度"`
 }
 
 type createInput struct {
@@ -75,6 +77,8 @@ func registerMeasurements(api huma.API, service *measurement.Service, logger *sl
 			CO2:           input.Body.CO2,
 			PM25:          input.Body.PM25,
 			PM10:          input.Body.PM10,
+			Latitude:      input.Body.Latitude,
+			Longitude:     input.Body.Longitude,
 		})
 		if err != nil {
 			return nil, serviceError(err, logger)

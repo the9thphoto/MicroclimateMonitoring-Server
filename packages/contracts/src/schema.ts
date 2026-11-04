@@ -112,6 +112,10 @@ export interface components {
             humidity: number;
             /** Format: int64 */
             id: number;
+            /** Format: double */
+            latitude: number | null;
+            /** Format: double */
+            longitude: number | null;
             /** Format: date-time */
             observed_at: string;
             /** Format: double */
@@ -139,6 +143,16 @@ export interface components {
              * @description 湿度 %
              */
             humidity: number;
+            /**
+             * Format: double
+             * @description 设备纬度
+             */
+            latitude?: number | null;
+            /**
+             * Format: double
+             * @description 设备经度
+             */
+            longitude?: number | null;
             /**
              * Format: date-time
              * @description 采集时间，必须带时区；省略时使用服务器时间

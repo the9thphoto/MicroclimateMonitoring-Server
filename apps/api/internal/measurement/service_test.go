@@ -77,6 +77,39 @@ func TestCreateRejectsBlankAndLongStation(t *testing.T) {
 	}
 }
 
+func TestCreateValidatesCoordinatePair(t *testing.T) {
+	service := NewService(&fakeRepository{})
+	latitude := 32.0839058
+	longitude := 118.6361144
+
+	item, err := service.Create(context.Background(), CreateInput{
+		StationID:   "station-01",
+		Temperature: 20,
+		Humidity:    50,
+		Latitude:    &latitude,
+		Longitude:   &longitude,
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if item.Latitude == nil || *item.Latitude != latitude || item.Longitude == nil {
+		t.Fatalf("coordinates not stored: %#v", item)
+	}
+
+	for _, input := range []CreateInput{
+		{StationID: "station-01", Temperature: 20, Humidity: 50, Latitude: &latitude},
+		{StationID: "station-01", Temperature: 20, Humidity: 50, Longitude: &longitude},
+		{StationID: "station-01", Temperature: 20, Humidity: 50, Latitude: floatPtr(91), Longitude: &longitude},
+		{StationID: "station-01", Temperature: 20, Humidity: 50, Latitude: &latitude, Longitude: floatPtr(181)},
+	} {
+		if _, err := service.Create(context.Background(), input); err == nil {
+			t.Fatalf("expected coordinate validation error: %#v", input)
+		}
+	}
+}
+
+func floatPtr(value float64) *float64 { return &value }
+
 func TestCreateKeepsObservedAtInUTC(t *testing.T) {
 	repo := &fakeRepository{}
 	service := NewService(repo)

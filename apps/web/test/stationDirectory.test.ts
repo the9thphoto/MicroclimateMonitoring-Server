@@ -16,6 +16,8 @@ function measurement(stationId: string, observedAt: string, temperature: number)
     co2: null,
     pm25: null,
     pm10: null,
+    latitude: 32.0839058,
+    longitude: 118.6361144,
   };
 }
 

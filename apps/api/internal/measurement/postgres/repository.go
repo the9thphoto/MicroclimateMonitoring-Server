@@ -13,7 +13,7 @@ import (
 )
 
 const columns = `id, station_id, observed_at, received_at, wind_speed,
-	wind_direction, temperature, humidity, co2, pm25, pm10`
+	wind_direction, temperature, humidity, co2, pm25, pm10, latitude, longitude`
 
 type scanner interface {
 	Scan(dest ...any) error
@@ -34,11 +34,11 @@ func (r *Repository) Create(ctx context.Context, m measurement.Measurement) (mea
 	row := r.pool.QueryRow(ctx, `
 		INSERT INTO measurements (
 			station_id, observed_at, received_at, wind_speed, wind_direction,
-			temperature, humidity, co2, pm25, pm10
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+			temperature, humidity, co2, pm25, pm10, latitude, longitude
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		RETURNING `+columns,
 		m.StationID, m.ObservedAt, m.ReceivedAt, m.WindSpeed, m.WindDirection,
-		m.Temperature, m.Humidity, m.CO2, m.PM25, m.PM10,
+		m.Temperature, m.Humidity, m.CO2, m.PM25, m.PM10, m.Latitude, m.Longitude,
 	)
 	return scan(row)
 }
@@ -123,6 +123,8 @@ func scan(row scanner) (measurement.Measurement, error) {
 		&item.CO2,
 		&item.PM25,
 		&item.PM10,
+		&item.Latitude,
+		&item.Longitude,
 	)
 	if err != nil {
 		return measurement.Measurement{}, err

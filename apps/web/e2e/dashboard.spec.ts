@@ -30,23 +30,20 @@ async function mockMap(page: Page) {
   await page.route("https://tile.openstreetmap.org/**", (route) => route.abort());
 }
 
-async function setLocations(
-  page: Page,
-  locations: Record<string, { latitude: number; longitude: number }>,
+async function seedStation(
+  request: APIRequestContext,
+  station: string,
+  count = 4,
+  latitude = 32.0839058,
+  longitude = 118.6361144,
 ) {
-  await page.addInitScript((entries) => {
-    for (const [station, location] of Object.entries(entries)) {
-      localStorage.setItem(`microclimate.location.${station}`, JSON.stringify(location));
-    }
-  }, locations);
-}
-
-async function seedStation(request: APIRequestContext, station: string, count = 4) {
   const now = Date.now();
   for (let index = 0; index < count; index += 1) {
     const response = await request.post(`${apiBaseURL}/api/v1/measurements`, {
       data: {
         station_id: station,
+        latitude,
+        longitude,
         observed_at: new Date(now - index * 60_000).toISOString(),
         temperature: 23.4 - index * 0.4,
         humidity: 56.7 - index * 0.5,
@@ -61,60 +58,56 @@ async function seedStation(request: APIRequestContext, station: string, count = 
   }
 }
 
-test("map workspace switches stations, layers and analysis views", async ({ page, request }) => {
+test("network map shows all reported stations and switches layers without selection", async ({
+  page,
+  request,
+}) => {
   await mockMap(page);
   const suffix = Date.now();
-  const main = `e2e-map-${suffix}`;
+  const main = `e2e-network-${suffix}`;
   const north = `e2e-north-${suffix}`;
   const east = `e2e-east-${suffix}`;
-  await setLocations(page, {
-    [main]: { latitude: 31.2304, longitude: 121.4737 },
-    [north]: { latitude: 31.26, longitude: 121.45 },
-    [east]: { latitude: 31.22, longitude: 121.51 },
-  });
-  await seedStation(request, main, 6);
-  await seedStation(request, north, 3);
-  await seedStation(request, east, 3);
+  await seedStation(request, main, 6, 32.0839, 118.6361);
+  await seedStation(request, north, 3, 32.086, 118.633);
+  await seedStation(request, east, 3, 32.081, 118.641);
 
-  await page.goto(`/?station=${main}&view=map&layer=temperature&range=24h`);
+  await page.goto("/");
 
   await expect(page.getByRole("heading", { name: "微气候观测地图" })).toBeVisible();
   await expect(page.locator(".maplibregl-canvas")).toBeVisible();
+  await expect(page.locator(".station-panel")).toHaveCount(0);
+  await expect(page.getByText("点击站点查看时间序列")).toBeVisible();
   await expect(page.locator(`.station-marker[data-station="${main}"]`)).toBeVisible();
   await expect(page.locator(`.station-marker[data-station="${north}"]`)).toBeVisible();
   await expect(page.locator(`.station-marker[data-station="${east}"]`)).toBeVisible();
 
-  await page.getByRole("button", { name: "湿度", exact: true }).click();
+  const temperature = page.getByRole("button", { name: "温度", exact: true });
+  const humidity = page.getByRole("button", { name: "湿度", exact: true });
+  await expect(temperature).toBeEnabled();
+  await expect(humidity).toBeEnabled();
+  await humidity.click();
   await expect(page).toHaveURL(/layer=humidity/);
-  await expect(page.locator(".topbar__status")).toContainText("相对湿度");
+  await expect(page).not.toHaveURL(/station=/);
 
   await page.locator(`.station-marker[data-station="${main}"]`).click();
   await expect(page.locator(".station-panel")).toBeVisible();
-  await expect(page.locator(".station-panel")).toContainText("次要要素");
+  await expect(page).toHaveURL(new RegExp(`station=${main}`));
   await expect(page.getByRole("button", { name: "关闭站点详情，返回总览地图" })).toBeVisible();
   await page.getByRole("button", { name: "关闭站点详情，返回总览地图" }).click();
   await expect(page.locator(".station-panel")).toHaveCount(0);
-
-  await page.getByRole("button", { name: "打开分析工作台" }).click();
-  await expect(page.getByRole("heading", { name: "分析工作台" })).toBeVisible();
-  await expect(page.locator(".maplibregl-canvas")).toHaveCount(0);
-  await page.getByRole("tab", { name: "分时分布" }).click();
-  await expect(page.locator(".box-plot")).toBeVisible();
-  await page.getByRole("tab", { name: "要素相关" }).click();
-  await expect(page.locator(".correlation__table")).toBeVisible();
-  await page.getByRole("button", { name: "返回地图" }).click();
-  await expect(page.locator(".maplibregl-canvas")).toBeVisible();
+  await expect(page).not.toHaveURL(/station=/);
+  await expect(page.getByText("点击站点查看时间序列")).toBeVisible();
 });
 
-test("timeline playback and scrubbing update the selected frame", async ({ page, request }) => {
+test("timeline playback and scrubbing update the selected station frame", async ({
+  page,
+  request,
+}) => {
   await mockMap(page);
   const station = `e2e-play-${Date.now()}`;
-  await setLocations(page, {
-    [station]: { latitude: 31.2304, longitude: 121.4737 },
-  });
   await seedStation(request, station, 6);
 
-  await page.goto(`/?station=${station}&view=map&range=24h`);
+  await page.goto(`/?station=${station}&view=station&range=24h`);
   const slider = page.getByRole("slider", { name: "回放时间" });
   await expect(slider).toBeVisible();
   const before = await slider.inputValue();
@@ -133,33 +126,31 @@ test("timeline playback and scrubbing update the selected frame", async ({ page,
   await expect(slider).not.toHaveValue("0");
 });
 
-test("location dialog saves coordinates and reveals the station marker", async ({
-  page,
-  request,
-}) => {
+test("station detail opens analysis and returns to the network map", async ({ page, request }) => {
   await mockMap(page);
-  const station = `e2e-locate-${Date.now()}`;
-  await seedStation(request, station, 2);
+  const station = `e2e-analysis-${Date.now()}`;
+  await seedStation(request, station, 4);
 
-  await page.goto(`/?station=${station}&view=map`);
-  await expect(page.locator(".map-empty")).toBeVisible();
-  await page.locator(".map-empty").getByRole("button", { name: "设置位置" }).click();
+  await page.goto("/");
+  await expect(page.getByRole("button", { name: "打开分析工作台" })).toBeDisabled();
+  await page.locator(`.station-marker[data-station="${station}"]`).click();
+  await expect(page.locator(".station-panel")).toBeVisible();
 
-  await page.getByLabel("纬度").fill("31.2304");
-  await page.getByLabel("经度").fill("121.4737");
-  await page.getByRole("button", { name: "保存" }).click();
-
-  await expect(page.getByRole("status")).toContainText("已保存");
-  await expect(page.locator(`.station-marker[data-station="${station}"]`)).toBeVisible();
-  await expect(page).toHaveURL(/lat=31\.23040/);
+  await page.getByRole("button", { name: "打开分析工作台" }).click();
+  await expect(page.getByRole("heading", { name: "分析工作台" })).toBeVisible();
+  await expect(page.locator(".maplibregl-canvas")).toHaveCount(0);
+  await page.getByRole("tab", { name: "分时分布" }).click();
+  await expect(page.locator(".box-plot")).toBeVisible();
+  await page.getByRole("tab", { name: "要素相关" }).click();
+  await expect(page.locator(".correlation__table")).toBeVisible();
+  await page.getByRole("button", { name: "返回地图" }).click();
+  await expect(page.locator(".maplibregl-canvas")).toBeVisible();
+  await expect(page.locator(".station-panel")).toHaveCount(0);
 });
 
 test("mobile station view is a dedicated page without map overlays", async ({ page, request }) => {
   await mockMap(page);
   const station = `e2e-mobile-${Date.now()}`;
-  await setLocations(page, {
-    [station]: { latitude: 31.2304, longitude: 121.4737 },
-  });
   await seedStation(request, station, 4);
   await page.setViewportSize({ width: 375, height: 812 });
 
@@ -174,6 +165,7 @@ test("mobile station view is a dedicated page without map overlays", async ({ pa
 
   await page.getByRole("button", { name: "返回地图" }).first().click();
   await expect(page.locator(".maplibregl-canvas")).toBeVisible();
+  await expect(page.locator(".network-dock")).toBeVisible();
 });
 
 test("forecast layers stay disabled until a model provider is connected", async ({
@@ -182,12 +174,9 @@ test("forecast layers stay disabled until a model provider is connected", async 
 }) => {
   await mockMap(page);
   const station = `e2e-forecast-${Date.now()}`;
-  await setLocations(page, {
-    [station]: { latitude: 31.2304, longitude: 121.4737 },
-  });
   await seedStation(request, station, 2);
 
-  await page.goto(`/?station=${station}&view=map`);
+  await page.goto("/");
   await expect(page.getByRole("button", { name: "降水" })).toBeDisabled();
   await expect(page.getByRole("button", { name: "云" })).toBeDisabled();
   await expect(page.getByRole("button", { name: "气压" })).toBeDisabled();

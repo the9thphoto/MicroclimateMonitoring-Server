@@ -1,8 +1,11 @@
 import type { Measurement } from "@microclimate/api-client";
 
+import { measurementLocation, type StationLocation } from "./location";
+
 export interface StationSnapshot {
   stationId: string;
   latest: Measurement;
+  location: StationLocation | null;
 }
 
 /**
@@ -17,6 +20,10 @@ export function groupLatestByStation(rows: Measurement[]): StationSnapshot[] {
     }
   }
   return [...latest.entries()]
-    .map(([stationId, measurement]) => ({ stationId, latest: measurement }))
+    .map(([stationId, measurement]) => ({
+      stationId,
+      latest: measurement,
+      location: measurementLocation(measurement),
+    }))
     .sort((left, right) => left.stationId.localeCompare(right.stationId));
 }

@@ -39,6 +39,8 @@ type Measurement struct {
 	CO2           *float64  `json:"co2"`
 	PM25          *float64  `json:"pm25"`
 	PM10          *float64  `json:"pm10"`
+	Latitude      *float64  `json:"latitude"`
+	Longitude     *float64  `json:"longitude"`
 }
 
 // CreateInput is a validated measurement submission.
@@ -52,6 +54,8 @@ type CreateInput struct {
 	CO2           *float64
 	PM25          *float64
 	PM10          *float64
+	Latitude      *float64
+	Longitude     *float64
 }
 
 // ListInput filters a measurement history query.
@@ -91,6 +95,18 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (Measurement, e
 	if utf8.RuneCountInString(stationID) > 64 {
 		return Measurement{}, &ValidationError{Field: "station_id", Message: "must be at most 64 characters"}
 	}
+	if (input.Latitude == nil) != (input.Longitude == nil) {
+		return Measurement{}, &ValidationError{
+			Field:   "latitude",
+			Message: "latitude and longitude must be provided together",
+		}
+	}
+	if input.Latitude != nil && (*input.Latitude < -90 || *input.Latitude > 90) {
+		return Measurement{}, &ValidationError{Field: "latitude", Message: "must be between -90 and 90"}
+	}
+	if input.Longitude != nil && (*input.Longitude < -180 || *input.Longitude > 180) {
+		return Measurement{}, &ValidationError{Field: "longitude", Message: "must be between -180 and 180"}
+	}
 
 	now := s.now().UTC()
 	observedAt := now
@@ -109,6 +125,8 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (Measurement, e
 		CO2:           input.CO2,
 		PM25:          input.PM25,
 		PM10:          input.PM10,
+		Latitude:      input.Latitude,
+		Longitude:     input.Longitude,
 	})
 }
 

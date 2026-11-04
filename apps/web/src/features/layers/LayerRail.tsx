@@ -49,7 +49,7 @@ export function LayerRail({
               className={layer.id === active ? "layer-button is-active" : "layer-button"}
               aria-pressed={layer.id === active}
               disabled={!enabled}
-              title={enabled ? layer.label : `${layer.label}：该站点未接入`}
+              title={enabled ? layer.label : `${layer.label}：全网暂无数据`}
               onClick={() => onSelect(layer.id)}
             >
               <span

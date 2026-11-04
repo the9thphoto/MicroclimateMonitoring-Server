@@ -111,7 +111,9 @@ func TestCreateAndListMeasurement(t *testing.T) {
 		"humidity": 63,
 		"co2": 418,
 		"pm25": 18,
-		"pm10": 34
+		"pm10": 34,
+		"latitude": 32.0839058,
+		"longitude": 118.6361144
 	}`
 
 	response, body := call(t, server, http.MethodPost, "/api/v1/measurements", payload)
@@ -121,6 +123,10 @@ func TestCreateAndListMeasurement(t *testing.T) {
 	created := decode[measurement.Measurement](t, body)
 	if created.StationID != "station-01" || created.Temperature != 21.6 {
 		t.Fatalf("unexpected measurement: %#v", created)
+	}
+	if created.Latitude == nil || created.Longitude == nil ||
+		*created.Latitude != 32.0839058 || *created.Longitude != 118.6361144 {
+		t.Fatalf("unexpected coordinates: %#v", created)
 	}
 	if created.ObservedAt.Format(time.RFC3339) != "2026-10-29T00:30:00Z" {
 		t.Fatalf("unexpected observed_at: %s", created.ObservedAt)
@@ -151,7 +157,9 @@ func TestCreatePartialMeasurementStoresNulls(t *testing.T) {
 	if err := json.Unmarshal(body, &fields); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	for _, name := range []string{"wind_speed", "wind_direction", "co2", "pm25", "pm10"} {
+	for _, name := range []string{
+		"wind_speed", "wind_direction", "co2", "pm25", "pm10", "latitude", "longitude",
+	} {
 		value, exists := fields[name]
 		if !exists || value != nil {
 			t.Fatalf("%s should be present and null: %#v", name, value)
@@ -187,6 +195,10 @@ func TestCreateValidation(t *testing.T) {
 		{"co2 high", func(m map[string]any) { m["co2"] = 100001 }},
 		{"naive time", func(m map[string]any) { m["observed_at"] = "2026-01-01T08:00:00" }},
 		{"invalid time", func(m map[string]any) { m["observed_at"] = "not-a-time" }},
+		{"latitude only", func(m map[string]any) { m["latitude"] = 32.08 }},
+		{"longitude only", func(m map[string]any) { m["longitude"] = 118.63 }},
+		{"latitude high", func(m map[string]any) { m["latitude"] = 91; m["longitude"] = 118.63 }},
+		{"longitude high", func(m map[string]any) { m["latitude"] = 32.08; m["longitude"] = 181 }},
 	}
 
 	for _, testCase := range cases {

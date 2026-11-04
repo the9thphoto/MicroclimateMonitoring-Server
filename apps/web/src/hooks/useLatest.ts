@@ -3,10 +3,14 @@ import { useQuery } from "@tanstack/react-query";
 
 import { api } from "../lib/api";
 
-export function useLatest(stationId: string) {
+export function useLatest(stationId: string | null) {
   return useQuery({
     queryKey: ["measurements", "latest", stationId],
+    enabled: Boolean(stationId),
     queryFn: async ({ signal }) => {
+      if (!stationId) {
+        return null;
+      }
       try {
         return await getLatest(api, stationId, signal);
       } catch (error) {

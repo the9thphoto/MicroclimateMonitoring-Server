@@ -11,7 +11,7 @@ OpenAPI 描述：/openapi.json
 健康检查：GET /health
 前端仪表盘：apps/web（默认开发端口 5173，容器端口 8080）
 
-设备通过 HTTP 直接上报，固件仓库与 C/ESP-IDF 实现保持不变。
+设备通过 HTTP 直接上报温湿度及自身经纬度；坐标由固件配置决定。
 
 二、数据表
 ----------------------------------------
@@ -54,6 +54,14 @@ pm25
 pm10
   类型：DOUBLE PRECISION 或 NULL，单位 μg/m³。
 
+latitude
+  类型：DOUBLE PRECISION 或 NULL，单位度。
+  说明：设备上报的纬度，与 longitude 成对出现。
+
+longitude
+  类型：DOUBLE PRECISION 或 NULL，单位度。
+  说明：设备上报的经度，地图使用每个站点最新记录的坐标。
+
 索引：
   ix_measurements_station_id (station_id)
   ix_measurements_observed_at (observed_at)
@@ -74,6 +82,8 @@ Content-Type: application/json
   co2             可选，0–100000，或 null。
   pm25            可选，0–10000，或 null。
   pm10            可选，0–10000，或 null。
+  latitude        可选，-90–90；与 longitude 必须同时提供。
+  longitude       可选，-180–180；与 latitude 必须同时提供。
 
 成功响应：201 Created
   {
@@ -87,12 +97,15 @@ Content-Type: application/json
     "wind_direction": null,
     "co2": null,
     "pm25": null,
-    "pm10": null
+    "pm10": null,
+    "latitude": 32.0839058,
+    "longitude": 118.6361144
   }
 
 说明：
 - 省略可选字段与显式传 null 等价，数据库保存为 NULL。
 - 响应中的可选字段始终存在，不会用 0 冒充缺失值。
+- 设备坐标由固件决定并随每条测量上报；地图使用每个站点最新记录的坐标。
 - 时间统一以 UTC 返回。
 
 四、查询历史数据
@@ -273,13 +286,15 @@ CI 使用 PostgreSQL service 的发布端口 55432；docker job 在 act 下跳�
 
   {
     "station_id": "station-01",
+    "latitude": 32.0839058,
+    "longitude": 118.6361144,
     "observed_at": "2026-11-04T08:30:00Z",
     "temperature": 21.6,
     "humidity": 63.0
   }
 
 说明：
-- station_id 由固件配置，默认 station-01。
+- station_id 由固件配置，默认 station-01；latitude / longitude 也由固件配置并随每条测量上报。
 - 温度取 Modbus 寄存器 0x0001 的有符号值 ÷ 10。
 - 湿度取 Modbus 寄存器 0x0000 的无符号值 ÷ 10。
 - 设备默认每 60 秒聚合上报一次。

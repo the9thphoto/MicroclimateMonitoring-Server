@@ -19,7 +19,6 @@ interface StationViewProps {
   onBack: () => void;
   onOpenAnalysis: () => void;
   onOpenData: () => void;
-  onOpenLocation: () => void;
 }
 
 export function StationView({
@@ -35,7 +34,6 @@ export function StationView({
   onBack,
   onOpenAnalysis,
   onOpenData,
-  onOpenLocation,
 }: StationViewProps) {
   return (
     <main className="station-page">
@@ -68,11 +66,7 @@ export function StationView({
         location={location}
       />
       <div className="station-page__actions">
-        <StationActions
-          onOpenAnalysis={onOpenAnalysis}
-          onOpenData={onOpenData}
-          onOpenLocation={onOpenLocation}
-        />
+        <StationActions onOpenAnalysis={onOpenAnalysis} onOpenData={onOpenData} />
       </div>
     </main>
   );

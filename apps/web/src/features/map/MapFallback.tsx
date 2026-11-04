@@ -24,7 +24,7 @@ export function MapFallback({ markers, activeLayer, onSelectStation }: MapFallba
         <strong>地图渲染不可用</strong>
         <p>当前浏览器无法启用 WebGL，站点数据仍可访问。</p>
         {markers.length === 0 ? (
-          <p className="map-fallback__empty">尚未配置站点坐标。</p>
+          <p className="map-fallback__empty">暂无站点上报坐标。</p>
         ) : (
           <ul>
             {markers.map((marker) => (

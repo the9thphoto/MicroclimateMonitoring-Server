@@ -28,8 +28,8 @@ func TestUpCreatesSchemaAndIsIdempotent(t *testing.T) {
 	`).Scan(&columns); err != nil {
 		t.Fatalf("count columns: %v", err)
 	}
-	if columns != 11 {
-		t.Fatalf("expected 11 columns, got %d", columns)
+	if columns != 13 {
+		t.Fatalf("expected 13 columns, got %d", columns)
 	}
 
 	var indexes int
@@ -50,7 +50,7 @@ func TestUpCreatesSchemaAndIsIdempotent(t *testing.T) {
 	`).Scan(&version); err != nil {
 		t.Fatalf("read goose version: %v", err)
 	}
-	if version != 1 {
-		t.Fatalf("expected goose version 1, got %d", version)
+	if version != 2 {
+		t.Fatalf("expected goose version 2, got %d", version)
 	}
 }

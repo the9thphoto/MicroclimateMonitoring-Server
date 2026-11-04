@@ -1,12 +1,11 @@
 import { ApiError } from "@microclimate/api-client";
-import { DEFAULT_STATION_ID } from "@microclimate/contracts";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 
 import { AnalysisView } from "./features/analysis/AnalysisView";
 import { LayerRail } from "./features/layers/LayerRail";
 import type { MapStationMarker } from "./features/map/MapFallback";
+import { NetworkDock } from "./features/network/NetworkDock";
 import { TopBar } from "./features/shell/TopBar";
-import { LocationDialog } from "./features/station/LocationDialog";
 import { StationPanel } from "./features/station/StationPanel";
 import { StationPicker } from "./features/station/StationPicker";
 import { StationView } from "./features/station/StationView";
@@ -22,23 +21,16 @@ import { useMediaQuery } from "./hooks/useMediaQuery";
 import { useStationDirectory } from "./hooks/useStationDirectory";
 import { useTimeline } from "./hooks/useTimeline";
 import { dataQuality, toAnalysisPoints } from "./lib/analysis";
-import { DEFAULT_LAYER, LAYERS, type LayerId, layerById } from "./lib/layers";
+import { LAYERS, type LayerId, layerById } from "./lib/layers";
 import {
-  allStoredLocations,
-  defaultLocation,
-  formatCoordinates,
-  locationFromSearch,
-  locationSearch,
-  type StationLocation,
-  saveStoredLocation,
-} from "./lib/location";
+  buildNetworkStations,
+  latestNetworkTime,
+  networkAvailability,
+  unlocatedCount,
+  visibleNetworkStations,
+} from "./lib/network";
 import { RANGE_OPTIONS } from "./lib/ranges";
-import {
-  type AppUrlState,
-  appStateFromSearch,
-  appStateSearch,
-  type ViewMode,
-} from "./lib/urlState";
+import { type AppUrlState, appStateFromSearch, appStateSearch } from "./lib/urlState";
 
 function errorMessage(error: Error | null): string | null {
   if (!error) {
@@ -51,25 +43,8 @@ function errorMessage(error: Error | null): string | null {
 }
 
 export function App() {
-  const [state, setState] = useState<AppUrlState>(() =>
-    appStateFromSearch(window.location.search, DEFAULT_STATION_ID),
-  );
-  const [locations, setLocations] = useState<Record<string, StationLocation>>(() => {
-    const stored = allStoredLocations();
-    const urlLocation = locationFromSearch(window.location.search);
-    const station = appStateFromSearch(window.location.search, DEFAULT_STATION_ID).station;
-    if (urlLocation) {
-      stored[station] = urlLocation;
-    }
-    const fallback = defaultLocation(station);
-    if (!stored[station] && fallback) {
-      stored[station] = fallback;
-    }
-    return stored;
-  });
+  const [state, setState] = useState<AppUrlState>(() => appStateFromSearch(window.location.search));
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [locationOpen, setLocationOpen] = useState(false);
-  const [pickMode, setPickMode] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const isMobile = useMediaQuery("(max-width: 700px)");
 
@@ -80,6 +55,15 @@ export function App() {
   const rangeOption =
     RANGE_OPTIONS.find((option) => option.key === state.range) ?? RANGE_OPTIONS[2]!;
   const rangeMs = rangeOption.milliseconds;
+  const networkStations = useMemo(
+    () => buildNetworkStations(directory.data ?? [], rangeMs),
+    [directory.data, rangeMs],
+  );
+  const visibleStations = useMemo(() => visibleNetworkStations(networkStations), [networkStations]);
+  const selectedStation = useMemo(
+    () => visibleStations.find((station) => station.stationId === state.station) ?? null,
+    [visibleStations, state.station],
+  );
   const rows = useMemo(() => history.data ?? [], [history.data]);
   const allPoints = useMemo(
     () => toAnalysisPoints(rows, rangeMs, Math.max(rows.length, 1)),
@@ -91,61 +75,40 @@ export function App() {
     [latest.data, rangeMs],
   );
   const activeLayer = layerById(state.layer);
-  const timeline = useTimeline(chartPoints, state.station, state.range);
+  const timeline = useTimeline(chartPoints, state.station ?? "", state.range);
   const selected = timeline.selected ?? latestPoint;
   const quality = useMemo(() => dataQuality(rows, rangeMs), [rows, rangeMs]);
+  const availability = useMemo(() => networkAvailability(visibleStations), [visibleStations]);
+  const unlocated = useMemo(() => unlocatedCount(networkStations), [networkStations]);
+  const lastUpdated = useMemo(() => latestNetworkTime(visibleStations), [visibleStations]);
 
-  const availability = useMemo(() => {
-    const source = allPoints.length > 0 ? allPoints : latestPoint ? [latestPoint] : [];
-    return Object.fromEntries(
-      LAYERS.map((layer) => [layer.id, source.length > 0 && layer.available(source)]),
-    ) as Record<LayerId, boolean>;
-  }, [allPoints, latestPoint]);
-
-  const updateState = useCallback(
-    (patch: Partial<AppUrlState>, options: { clearLocation?: boolean } = {}) => {
-      setState((previous) => ({ ...previous, ...patch }));
-      const search = appStateSearch(window.location.search, patch, options);
-      window.history.replaceState(null, "", `${window.location.pathname}${search}`);
-    },
-    [],
-  );
+  const updateState = useCallback((patch: Partial<AppUrlState>) => {
+    setState((previous) => {
+      const next = { ...previous, ...patch };
+      if (next.view === "map") {
+        next.station = null;
+      }
+      return next;
+    });
+    window.history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}${appStateSearch(window.location.search, patch)}`,
+    );
+  }, []);
 
   const selectStation = useCallback(
     (stationId: string) => {
-      const nextView: ViewMode = state.view === "analysis" ? "analysis" : "station";
-      updateState({ station: stationId, view: nextView }, { clearLocation: true });
+      updateState({ station: stationId, view: "station" });
       setPickerOpen(false);
-      setLocationOpen(false);
     },
-    [state.view, updateState],
+    [updateState],
   );
 
-  const saveLocation = useCallback(
-    (location: StationLocation) => {
-      setLocations((previous) => ({ ...previous, [state.station]: location }));
-      saveStoredLocation(state.station, location);
-      setLocationOpen(false);
-      setPickMode(false);
-      setToast(`已保存 ${state.station} 的位置：${formatCoordinates(location)}`);
-      const search = locationSearch(window.location.search, location);
-      window.history.replaceState(null, "", `${window.location.pathname}${search}`);
-    },
-    [state.station],
-  );
-
-  const clearLocation = useCallback(() => {
-    setLocations((previous) => {
-      const next = { ...previous };
-      delete next[state.station];
-      return next;
-    });
-    saveStoredLocation(state.station, null);
-    setLocationOpen(false);
-    setToast(`已清除 ${state.station} 的位置`);
-    const search = locationSearch(window.location.search, null);
-    window.history.replaceState(null, "", `${window.location.pathname}${search}`);
-  }, [state.station]);
+  const selectAllStations = useCallback(() => {
+    updateState({ view: "map", station: null });
+    setPickerOpen(false);
+  }, [updateState]);
 
   const selectLayer = useCallback(
     (layer: LayerId) => {
@@ -154,67 +117,42 @@ export function App() {
     [updateState],
   );
 
-  const openAnalysis = useCallback(() => updateState({ view: "analysis" }), [updateState]);
-  const openMap = useCallback(() => updateState({ view: "map" }), [updateState]);
-  const openData = useCallback(() => updateState({ view: "analysis", tab: "data" }), [updateState]);
+  const openAnalysis = useCallback(() => {
+    if (!state.station) {
+      return;
+    }
+    updateState({ view: "analysis" });
+  }, [state.station, updateState]);
+  const openMap = useCallback(() => {
+    updateState({ view: "map", station: null });
+  }, [updateState]);
+  const openData = useCallback(() => {
+    if (!state.station) {
+      return;
+    }
+    updateState({ view: "analysis", tab: "data" });
+  }, [state.station, updateState]);
   const openPicker = useCallback(() => setPickerOpen(true), []);
   const closePicker = useCallback(() => setPickerOpen(false), []);
-  const openLocationDialog = useCallback(() => setLocationOpen(true), []);
-  const closeLocationDialog = useCallback(() => setLocationOpen(false), []);
-  const pickOnMap = useCallback(() => {
-    setLocationOpen(false);
-    setPickMode(true);
-  }, []);
   const forecastNotice = useCallback(() => setToast("预报服务尚未接入，暂不显示预报场。"), []);
 
   const error = latest.error ?? history.error ?? directory.error;
   const message = errorMessage(error);
   const offline = Boolean(error);
-  const focus = locations[state.station] ?? null;
+  const focus = selectedStation?.location ?? null;
 
-  const markers = useMemo(() => {
-    const result: MapStationMarker[] = [];
-    const seen = new Set<string>();
-    const snapshots = directory.data ?? [];
-
-    for (const snapshot of snapshots) {
-      const location = locations[snapshot.stationId];
-      if (!location) {
-        continue;
-      }
-      const isSelected = snapshot.stationId === state.station;
-      const point = isSelected
-        ? selected
-        : (toAnalysisPoints([snapshot.latest], rangeMs, 1)[0] ?? null);
-      result.push({
-        stationId: snapshot.stationId,
-        location,
-        value: point ? activeLayer.valueOf(point) : null,
-        direction: point?.windDirection ?? null,
-        selected: isSelected,
-      });
-      seen.add(snapshot.stationId);
-    }
-
-    if (!seen.has(state.station) && focus) {
-      result.push({
-        stationId: state.station,
-        location: focus,
-        value: selected ? activeLayer.valueOf(selected) : null,
-        direction: selected?.windDirection ?? null,
-        selected: true,
-      });
-    }
-    return result;
-  }, [directory.data, locations, state.station, selected, activeLayer, focus, rangeMs]);
-
-  const stationOptions = useMemo(() => {
-    const options = directory.data ?? [];
-    if (!latest.data || options.some((item) => item.stationId === state.station)) {
-      return options;
-    }
-    return [...options, { stationId: state.station, latest: latest.data }];
-  }, [directory.data, latest.data, state.station]);
+  const markers = useMemo<MapStationMarker[]>(() => {
+    return visibleStations.map((station) => {
+      const point = station.stationId === state.station && selected ? selected : station.point;
+      return {
+        stationId: station.stationId,
+        location: station.location!,
+        value: activeLayer.valueOf(point),
+        direction: point.windDirection ?? null,
+        selected: station.stationId === state.station,
+      };
+    });
+  }, [visibleStations, state.station, selected, activeLayer]);
 
   useEffect(() => {
     if (!toast) {
@@ -225,46 +163,42 @@ export function App() {
   }, [toast]);
 
   useEffect(() => {
-    if (!pickMode) {
-      return;
-    }
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setPickMode(false);
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [pickMode]);
-
-  useEffect(() => {
-    if (!offline) {
-      return;
-    }
-    setPickMode(false);
-  }, [offline]);
-
-  useEffect(() => {
-    if (!allPoints.length) {
-      return;
-    }
-    if (state.layer !== DEFAULT_LAYER && !layerById(state.layer).available(allPoints)) {
-      updateState({ layer: DEFAULT_LAYER });
-    }
-  }, [allPoints, state.layer, updateState]);
-
-  useEffect(() => {
     const onPopState = () => {
-      const next = appStateFromSearch(window.location.search, DEFAULT_STATION_ID);
-      setState(next);
-      const urlLocation = locationFromSearch(window.location.search);
-      if (urlLocation) {
-        setLocations((previous) => ({ ...previous, [next.station]: urlLocation }));
-      }
+      setState(appStateFromSearch(window.location.search));
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
+
+  useEffect(() => {
+    if (availability[state.layer]) {
+      return;
+    }
+    const fallback = LAYERS.find((layer) => availability[layer.id])?.id;
+    if (fallback) {
+      updateState({ layer: fallback });
+    }
+  }, [availability, state.layer, updateState]);
+
+  useEffect(() => {
+    if (
+      state.view !== "station" ||
+      !state.station ||
+      !directory.isSuccess ||
+      selectedStation ||
+      directory.isFetching
+    ) {
+      return;
+    }
+    updateState({ view: "map", station: null });
+  }, [
+    state.view,
+    state.station,
+    directory.isSuccess,
+    directory.isFetching,
+    selectedStation,
+    updateState,
+  ]);
 
   const retry = () => {
     void latest.refetch();
@@ -285,19 +219,20 @@ export function App() {
   const stationHeader = (
     <TopBar
       station={state.station}
+      stationCount={visibleStations.length}
+      unlocated={unlocated}
       view={state.view}
       layerLabel={activeLayer.label}
       point={selected}
-      loading={latest.isLoading || history.isLoading}
+      loading={directory.isLoading || latest.isLoading || history.isLoading}
       offline={offline}
       onOpenSearch={openPicker}
-      onOpenLocation={openLocationDialog}
       onOpenAnalysis={openAnalysis}
       onBackToMap={openMap}
     />
   );
 
-  if (state.view === "analysis") {
+  if (state.view === "analysis" && state.station) {
     return (
       <div className="app-shell app-shell--analysis">
         <AnalysisView
@@ -316,9 +251,8 @@ export function App() {
         <StationPicker
           open={pickerOpen}
           selected={state.station}
-          stations={stationOptions}
-          locations={locations}
-          onSelect={selectStation}
+          stations={visibleStations}
+          onSelect={(stationId) => (stationId ? selectStation(stationId) : selectAllStations())}
           onClose={closePicker}
         />
         {message ? (
@@ -338,43 +272,42 @@ export function App() {
     );
   }
 
-  const mobileStation = isMobile && state.view === "station";
+  const hasPanel = state.view === "station" && Boolean(selectedStation);
+  const mobileStation = isMobile && hasPanel;
 
   return (
     <div className="app-shell">
       {stationHeader}
 
-      {mobileStation ? (
+      {mobileStation && selectedStation ? (
         <StationView
-          station={state.station}
+          station={selectedStation.stationId}
           point={selected}
           values={chartPoints}
           layer={activeLayer}
           quality={quality}
-          location={focus}
+          location={selectedStation.location}
           availability={availability}
           onSelectLayer={selectLayer}
           onForecast={forecastNotice}
           onBack={openMap}
           onOpenAnalysis={openAnalysis}
           onOpenData={openData}
-          onOpenLocation={openLocationDialog}
         />
       ) : (
         <>
-          <div className={state.view === "station" ? "workspace-main has-panel" : "workspace-main"}>
-            {state.view === "station" ? (
+          <div className={hasPanel ? "workspace-main has-panel" : "workspace-main"}>
+            {hasPanel && selectedStation ? (
               <StationPanel
-                station={state.station}
+                station={selectedStation.stationId}
                 point={selected}
                 values={chartPoints}
                 layer={activeLayer}
                 quality={quality}
-                location={focus}
+                location={selectedStation.location}
                 onClose={openMap}
                 onOpenAnalysis={openAnalysis}
                 onOpenData={openData}
-                onOpenLocation={openLocationDialog}
               />
             ) : null}
             <Suspense fallback={<div className="map-loading">正在加载地图…</div>}>
@@ -382,11 +315,8 @@ export function App() {
                 markers={markers}
                 activeLayer={activeLayer}
                 focus={focus}
-                mode={state.view === "station" ? "station" : "overview"}
-                pickMode={pickMode}
+                mode={hasPanel ? "station" : "overview"}
                 onSelectStation={selectStation}
-                onPickLocation={saveLocation}
-                onOpenLocation={openLocationDialog}
               />
             </Suspense>
             <LayerRail
@@ -396,22 +326,33 @@ export function App() {
               onForecast={forecastNotice}
             />
           </div>
-          <TimelineDock
-            points={chartPoints}
-            selectedIndex={timeline.index}
-            selected={selected}
-            layer={activeLayer}
-            range={state.range}
-            playing={timeline.playing}
-            speed={timeline.speed}
-            canPlay={timeline.canPlay}
-            onRangeChange={handleRange}
-            onSelectIndex={handleTimelineIndex}
-            onToggle={timeline.toggle}
-            onSpeedChange={timeline.setSpeed}
-            onToLatest={timeline.toLatest}
-            compact={isMobile}
-          />
+          {hasPanel && selectedStation ? (
+            <TimelineDock
+              points={chartPoints}
+              selectedIndex={timeline.index}
+              selected={selected}
+              layer={activeLayer}
+              range={state.range}
+              playing={timeline.playing}
+              speed={timeline.speed}
+              canPlay={timeline.canPlay}
+              onRangeChange={handleRange}
+              onSelectIndex={handleTimelineIndex}
+              onToggle={timeline.toggle}
+              onSpeedChange={timeline.setSpeed}
+              onToLatest={timeline.toLatest}
+              compact={isMobile}
+            />
+          ) : (
+            <NetworkDock
+              stations={visibleStations}
+              unlocated={unlocated}
+              layer={activeLayer}
+              lastUpdated={lastUpdated}
+              loading={directory.isLoading}
+              onRefresh={() => void directory.refetch()}
+            />
+          )}
         </>
       )}
 
@@ -432,22 +373,10 @@ export function App() {
       <StationPicker
         open={pickerOpen}
         selected={state.station}
-        stations={stationOptions}
-        locations={locations}
-        onSelect={selectStation}
+        stations={visibleStations}
+        onSelect={(stationId) => (stationId ? selectStation(stationId) : selectAllStations())}
         onClose={closePicker}
       />
-
-      {locationOpen ? (
-        <LocationDialog
-          station={state.station}
-          initial={focus}
-          onSave={saveLocation}
-          onClear={clearLocation}
-          onPickOnMap={pickOnMap}
-          onClose={closeLocationDialog}
-        />
-      ) : null}
     </div>
   );
 }
