@@ -39,6 +39,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/network/frames": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 查询全网时间帧 */
+        get: operations["network-frames"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -100,6 +117,20 @@ export interface components {
              * @example https://example.com/errors/example
              */
             type: string;
+        };
+        Frame: {
+            stations: components["schemas"]["Measurement"][] | null;
+            /** Format: date-time */
+            time: string;
+        };
+        FramesResponse: {
+            /** Format: date-time */
+            end: string;
+            frames: components["schemas"]["Frame"][] | null;
+            /** Format: date-time */
+            start: string;
+            /** Format: int64 */
+            step: number;
         };
         HealthOutputBody: {
             /** @example ok */
@@ -287,6 +318,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Measurement"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "network-frames": {
+        parameters: {
+            query: {
+                /** @description 起始时间，必须带时区 */
+                start: string;
+                /** @description 结束时间，必须带时区 */
+                end: string;
+                /** @description 时间桶秒数 */
+                step?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FramesResponse"];
                 };
             };
             /** @description Error */

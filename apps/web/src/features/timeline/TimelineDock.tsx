@@ -22,6 +22,7 @@ interface TimelineDockProps {
   onSpeedChange: (speed: 1 | 2) => void;
   onToLatest: () => void;
   domain?: [number, number];
+  source?: string;
   compact?: boolean;
 }
 
@@ -40,6 +41,7 @@ export function TimelineDock({
   onSpeedChange,
   onToLatest,
   domain,
+  source,
   compact = false,
 }: TimelineDockProps) {
   const selectedValue = selected ? layer.valueOf(selected) : null;
@@ -105,7 +107,7 @@ export function TimelineDock({
       </div>
 
       <div className="timeline-dock__body">
-        <MapLegend layer={layer} domain={domain} />
+        <MapLegend layer={layer} domain={domain} source={source} />
         <div className="timeline-dock__chart">
           <TimelineChart
             points={chartPoints}

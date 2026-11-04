@@ -73,6 +73,62 @@
         },
         "type": "object"
       },
+      "Frame": {
+        "additionalProperties": false,
+        "properties": {
+          "stations": {
+            "items": {
+              "$ref": "#/components/schemas/Measurement"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "time": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "time",
+          "stations"
+        ],
+        "type": "object"
+      },
+      "FramesResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "end": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "frames": {
+            "items": {
+              "$ref": "#/components/schemas/Frame"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "start": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "step": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "start",
+          "end",
+          "step",
+          "frames"
+        ],
+        "type": "object"
+      },
       "HealthOutputBody": {
         "additionalProperties": false,
         "properties": {
@@ -476,6 +532,77 @@
           }
         },
         "summary": "查询最新测量数据",
+        "tags": [
+          "measurements"
+        ]
+      }
+    },
+    "/api/v1/network/frames": {
+      "get": {
+        "operationId": "network-frames",
+        "parameters": [
+          {
+            "description": "起始时间，必须带时区",
+            "explode": false,
+            "in": "query",
+            "name": "start",
+            "required": true,
+            "schema": {
+              "description": "起始时间，必须带时区",
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "description": "结束时间，必须带时区",
+            "explode": false,
+            "in": "query",
+            "name": "end",
+            "required": true,
+            "schema": {
+              "description": "结束时间，必须带时区",
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "description": "时间桶秒数",
+            "explode": false,
+            "in": "query",
+            "name": "step",
+            "schema": {
+              "default": 300,
+              "description": "时间桶秒数",
+              "format": "int64",
+              "maximum": 3600,
+              "minimum": 60,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FramesResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "查询全网时间帧",
         "tags": [
           "measurements"
         ]

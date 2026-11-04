@@ -4,7 +4,6 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react
 import { AnalysisView } from "./features/analysis/AnalysisView";
 import { LayerRail } from "./features/layers/LayerRail";
 import type { MapStationMarker } from "./features/map/MapFallback";
-import { NetworkDock } from "./features/network/NetworkDock";
 import { TopBar } from "./features/shell/TopBar";
 import { StationPanel } from "./features/station/StationPanel";
 import { StationPicker } from "./features/station/StationPicker";
@@ -18,6 +17,7 @@ const MapView = lazy(() =>
 import { useHistory } from "./hooks/useHistory";
 import { useLatest } from "./hooks/useLatest";
 import { useMediaQuery } from "./hooks/useMediaQuery";
+import { useNetworkFrames } from "./hooks/useNetworkFrames";
 import { useStationDirectory } from "./hooks/useStationDirectory";
 import { useTimeline } from "./hooks/useTimeline";
 import { dataQuality, toAnalysisPoints } from "./lib/analysis";
@@ -25,7 +25,6 @@ import { buildTemperatureField } from "./lib/field";
 import { LAYERS, type LayerId, layerById } from "./lib/layers";
 import {
   buildNetworkStations,
-  latestNetworkTime,
   networkAvailability,
   unlocatedCount,
   visibleNetworkStations,
@@ -53,6 +52,7 @@ export function App() {
   const latest = useLatest(state.station);
   const history = useHistory(state.station, state.range);
   const directory = useStationDirectory();
+  const networkFrames = useNetworkFrames(state.range);
 
   const rangeOption =
     RANGE_OPTIONS.find((option) => option.key === state.range) ?? RANGE_OPTIONS[2]!;
@@ -77,18 +77,31 @@ export function App() {
     () => (latest.data ? (toAnalysisPoints([latest.data], rangeMs, 1)[0] ?? null) : null),
     [latest.data, rangeMs],
   );
+  const networkPoints = useMemo(
+    () => networkFrames.data?.map((frame) => frame.average) ?? [],
+    [networkFrames.data],
+  );
+  const networkTimeline = useTimeline(networkPoints, "network", state.range);
+  const selectedNetworkFrame =
+    networkFrames.data?.[networkTimeline.index] ??
+    networkFrames.data?.[networkFrames.data.length - 1] ??
+    null;
+  const displayStations = hasPanel
+    ? visibleStations
+    : selectedNetworkFrame?.stations.length
+      ? selectedNetworkFrame.stations
+      : visibleStations;
   const activeLayer = layerById(state.layer);
   const timeline = useTimeline(chartPoints, state.station ?? "", state.range);
   const selected = timeline.selected ?? latestPoint;
   const quality = useMemo(() => dataQuality(rows, rangeMs), [rows, rangeMs]);
   const availability = useMemo(() => networkAvailability(visibleStations), [visibleStations]);
   const unlocated = useMemo(() => unlocatedCount(networkStations), [networkStations]);
-  const lastUpdated = useMemo(() => latestNetworkTime(visibleStations), [visibleStations]);
-  const fieldAvailable = activeLayer.id === "temperature" && visibleStations.length >= 3;
+  const fieldAvailable = activeLayer.id === "temperature" && displayStations.length >= 3;
   const field = useMemo(
     () =>
-      fieldAvailable && fieldVisible && !hasPanel ? buildTemperatureField(visibleStations) : null,
-    [fieldAvailable, fieldVisible, hasPanel, visibleStations],
+      fieldAvailable && fieldVisible && !hasPanel ? buildTemperatureField(displayStations) : null,
+    [fieldAvailable, fieldVisible, hasPanel, displayStations],
   );
   const displayDomain = activeLayer.domain;
 
@@ -146,13 +159,13 @@ export function App() {
   const closePicker = useCallback(() => setPickerOpen(false), []);
   const forecastNotice = useCallback(() => setToast("预报服务尚未接入，暂不显示预报场。"), []);
 
-  const error = latest.error ?? history.error ?? directory.error;
+  const error = latest.error ?? history.error ?? directory.error ?? networkFrames.error;
   const message = errorMessage(error);
   const offline = Boolean(error);
   const focus = selectedStation?.location ?? null;
 
   const markers = useMemo<MapStationMarker[]>(() => {
-    return visibleStations.map((station) => {
+    return displayStations.map((station) => {
       const point = station.stationId === state.station && selected ? selected : station.point;
       return {
         stationId: station.stationId,
@@ -162,7 +175,7 @@ export function App() {
         selected: station.stationId === state.station,
       };
     });
-  }, [visibleStations, state.station, selected, activeLayer]);
+  }, [displayStations, state.station, selected, activeLayer]);
 
   useEffect(() => {
     if (!toast) {
@@ -214,6 +227,7 @@ export function App() {
     void latest.refetch();
     void history.refetch();
     void directory.refetch();
+    void networkFrames.refetch();
   };
 
   const handleTimelineIndex = (index: number) => {
@@ -223,7 +237,13 @@ export function App() {
 
   const handleRange = (range: AppUrlState["range"]) => {
     timeline.stop();
+    networkTimeline.stop();
     updateState({ range });
+  };
+
+  const handleNetworkIndex = (index: number) => {
+    networkTimeline.stop();
+    networkTimeline.setIndex(index);
   };
 
   const stationHeader = (
@@ -232,10 +252,15 @@ export function App() {
       stationCount={visibleStations.length}
       unlocated={unlocated}
       view={state.view}
-      layerLabel={activeLayer.label}
-      point={selected}
-      loading={directory.isLoading || latest.isLoading || history.isLoading}
+      layerLabel={state.station ? activeLayer.label : `${activeLayer.label} · 全网平均`}
+      point={state.station ? selected : networkTimeline.selected}
+      loading={
+        directory.isLoading || latest.isLoading || history.isLoading || networkFrames.isLoading
+      }
       offline={offline}
+      fieldAvailable={fieldAvailable && !hasPanel}
+      fieldVisible={fieldVisible}
+      onToggleField={() => setFieldVisible((visible) => !visible)}
       onOpenSearch={openPicker}
       onOpenAnalysis={openAnalysis}
       onBackToMap={openMap}
@@ -356,22 +381,27 @@ export function App() {
               compact={isMobile}
             />
           ) : (
-            <NetworkDock
-              stations={visibleStations}
-              unlocated={unlocated}
+            <TimelineDock
+              points={networkPoints}
+              selectedIndex={networkTimeline.index}
+              selected={networkTimeline.selected}
               layer={activeLayer}
+              range={state.range}
+              playing={networkTimeline.playing}
+              speed={networkTimeline.speed}
+              canPlay={networkTimeline.canPlay}
+              onRangeChange={handleRange}
+              onSelectIndex={handleNetworkIndex}
+              onToggle={networkTimeline.toggle}
+              onSpeedChange={networkTimeline.setSpeed}
+              onToLatest={networkTimeline.toLatest}
               domain={displayDomain}
-              lastUpdated={lastUpdated}
-              loading={directory.isLoading}
-              fieldAvailable={fieldAvailable}
-              fieldVisible={fieldVisible}
-              fieldSource={
+              source={
                 field
                   ? `IDW 温度场 · ${field.stationCount} 站 · 远场均值 ${field.mean.toFixed(1)}°C · 虚线内有效`
                   : undefined
               }
-              onToggleField={() => setFieldVisible((visible) => !visible)}
-              onRefresh={() => void directory.refetch()}
+              compact={isMobile}
             />
           )}
         </>

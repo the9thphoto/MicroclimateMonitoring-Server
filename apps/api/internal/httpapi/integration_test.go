@@ -384,3 +384,52 @@ type failingPinger struct{}
 func (failingPinger) Ping(context.Context) error {
 	return context.DeadlineExceeded
 }
+
+func TestNetworkFrames(t *testing.T) {
+	server := newTestServer(t)
+	seed := func(station, observedAt string, temperature float64) {
+		payload, _ := json.Marshal(map[string]any{
+			"station_id": station, "observed_at": observedAt,
+			"temperature": temperature, "humidity": 50,
+			"latitude": 32.08, "longitude": 118.63,
+		})
+		response, body := call(t, server, http.MethodPost, "/api/v1/measurements", string(payload))
+		if response.StatusCode != http.StatusCreated {
+			t.Fatalf("seed: %d %s", response.StatusCode, body)
+		}
+	}
+	seed("station-a", "2026-11-04T10:01:00Z", 20)
+	seed("station-a", "2026-11-04T10:06:00Z", 22)
+	seed("station-b", "2026-11-04T10:02:00Z", 24)
+	seed("station-b", "2026-11-04T10:07:00Z", 26)
+
+	response, body := call(t, server, http.MethodGet,
+		"/api/v1/network/frames?start=2026-11-04T10:00:00Z&end=2026-11-04T10:10:00Z&step=300", "")
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("frames: %d %s", response.StatusCode, body)
+	}
+	result := decode[measurement.FramesResponse](t, body)
+	if result.Step != 300 || len(result.Frames) != 2 {
+		t.Fatalf("unexpected frames response: %#v", result)
+	}
+	if len(result.Frames[0].Stations) != 2 || len(result.Frames[1].Stations) != 2 {
+		t.Fatalf("unexpected station counts: %#v", result.Frames)
+	}
+	if result.Frames[0].Stations[0].Temperature != 20 || result.Frames[1].Stations[0].Temperature != 22 {
+		t.Fatalf("unexpected bucket values: %#v", result.Frames)
+	}
+	if !result.Frames[0].Time.Before(result.Frames[1].Time) {
+		t.Fatalf("frames not ordered: %#v", result.Frames)
+	}
+
+	for _, path := range []string{
+		"/api/v1/network/frames?start=2026-11-04T10:00:00Z&end=2026-11-04T10:10:00Z&step=1",
+		"/api/v1/network/frames?start=2026-11-04T10:00:00Z&end=2026-11-04T10:10:00Z&step=3601",
+		"/api/v1/network/frames?end=2026-11-04T10:10:00Z&step=300",
+	} {
+		response, body := call(t, server, http.MethodGet, path, "")
+		if response.StatusCode != http.StatusUnprocessableEntity {
+			t.Fatalf("%s: status %d %s", path, response.StatusCode, body)
+		}
+	}
+}

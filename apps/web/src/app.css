@@ -2369,3 +2369,21 @@ button:disabled {
   background: color-mix(in srgb, var(--accent) 12%, transparent);
   color: var(--accent);
 }
+
+.topbar__field-toggle {
+  white-space: nowrap;
+  min-width: 52px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 5px 9px;
+}
+
+.topbar__field-toggle[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+}

@@ -5,6 +5,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -85,6 +87,70 @@ func (r *Repository) List(ctx context.Context, filter measurement.ListInput) ([]
 		return nil, err
 	}
 	return measurements, nil
+}
+
+// Frames returns the newest observation per station in fixed time buckets.
+func (r *Repository) Frames(ctx context.Context, query measurement.FrameQuery) ([]measurement.Frame, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT DISTINCT ON (station_id, bucket)
+			bucket, `+columns+`
+		FROM (
+			SELECT
+				date_bin(make_interval(secs => $1), observed_at, $2) AS bucket,
+				`+columns+`
+			FROM measurements
+			WHERE observed_at >= $2 AND observed_at < $3
+		) bucketed
+		ORDER BY station_id, bucket, observed_at DESC, id DESC
+	`, int(query.Step.Seconds()), query.Start, query.End)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	byTime := make(map[int64]*measurement.Frame)
+	order := make([]int64, 0)
+	for rows.Next() {
+		var bucket time.Time
+		var item measurement.Measurement
+		if err := rows.Scan(
+			&bucket,
+			&item.ID,
+			&item.StationID,
+			&item.ObservedAt,
+			&item.ReceivedAt,
+			&item.WindSpeed,
+			&item.WindDirection,
+			&item.Temperature,
+			&item.Humidity,
+			&item.CO2,
+			&item.PM25,
+			&item.PM10,
+			&item.Latitude,
+			&item.Longitude,
+		); err != nil {
+			return nil, err
+		}
+		item.ObservedAt = item.ObservedAt.UTC()
+		item.ReceivedAt = item.ReceivedAt.UTC()
+		key := bucket.UTC().UnixNano()
+		frame, exists := byTime[key]
+		if !exists {
+			frame = &measurement.Frame{Time: bucket.UTC(), Stations: make([]measurement.Measurement, 0, 16)}
+			byTime[key] = frame
+			order = append(order, key)
+		}
+		frame.Stations = append(frame.Stations, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	sort.Slice(order, func(i, j int) bool { return order[i] < order[j] })
+	frames := make([]measurement.Frame, 0, len(order))
+	for _, key := range order {
+		frames = append(frames, *byTime[key])
+	}
+	return frames, nil
 }
 
 // Latest returns the newest measurement, optionally limited to one station.

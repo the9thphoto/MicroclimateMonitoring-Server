@@ -16,6 +16,8 @@ type fakeRepository struct {
 	latest     Measurement
 	latestErr  error
 	latestID   string
+	frames     []Frame
+	frameQuery FrameQuery
 }
 
 func (f *fakeRepository) Create(_ context.Context, item Measurement) (Measurement, error) {
@@ -35,6 +37,11 @@ func (f *fakeRepository) List(_ context.Context, filter ListInput) ([]Measuremen
 func (f *fakeRepository) Latest(_ context.Context, stationID string) (Measurement, error) {
 	f.latestID = stationID
 	return f.latest, f.latestErr
+}
+
+func (f *fakeRepository) Frames(_ context.Context, query FrameQuery) ([]Frame, error) {
+	f.frameQuery = query
+	return f.frames, nil
 }
 
 func (f *fakeRepository) Ping(_ context.Context) error { return nil }

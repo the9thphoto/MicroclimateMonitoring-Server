@@ -47,6 +47,7 @@ async function seedStation(
   count = 4,
   latitude?: number,
   longitude?: number,
+  spacingMs = 60_000,
 ) {
   const fallback = defaultCoordinates(station);
   const lat = latitude ?? fallback.latitude;
@@ -58,7 +59,7 @@ async function seedStation(
         station_id: station,
         latitude: lat,
         longitude: lon,
-        observed_at: new Date(now - index * 60_000).toISOString(),
+        observed_at: new Date(now - index * spacingMs).toISOString(),
         temperature: 23.4 - index * 0.4,
         humidity: 56.7 - index * 0.5,
         wind_speed: 2.4 + index * 0.2,
@@ -90,7 +91,8 @@ test("network map shows all reported stations and switches layers without select
   await expect(page.getByRole("heading", { name: "微气候观测地图" })).toBeVisible();
   await expect(page.locator(".maplibregl-canvas")).toBeVisible();
   await expect(page.locator(".station-panel")).toHaveCount(0);
-  await expect(page.getByText("点击站点查看时间序列")).toBeVisible();
+  await expect(page.locator(".timeline-dock")).toBeVisible();
+  await expect(page.getByRole("slider", { name: "回放时间" })).toBeVisible();
   await expect(page.locator(`.station-marker[data-station="${main}"]`)).toBeVisible();
   await expect(page.locator(`.station-marker[data-station="${north}"]`)).toBeVisible();
   await expect(page.locator(`.station-marker[data-station="${east}"]`)).toBeVisible();
@@ -115,7 +117,26 @@ test("network map shows all reported stations and switches layers without select
   await page.getByRole("button", { name: "关闭站点详情，返回总览地图" }).click();
   await expect(page.locator(".station-panel")).toHaveCount(0);
   await expect(page).not.toHaveURL(/station=/);
-  await expect(page.getByText("点击站点查看时间序列")).toBeVisible();
+  await expect(page.locator(".timeline-dock")).toBeVisible();
+});
+
+test("network timeline scrubs all stations over time", async ({ page, request }) => {
+  await mockMap(page);
+  const station = `e2e-network-timeline-${Date.now()}`;
+  await seedStation(request, station, 4, 32.0839, 118.6361, 10 * 60_000);
+
+  await page.goto("/");
+  const slider = page.getByRole("slider", { name: "回放时间" });
+  await expect(slider).toBeVisible();
+  await expect(slider).toBeEnabled();
+  const max = Number(await slider.getAttribute("max"));
+  expect(max).toBeGreaterThan(0);
+
+  const marker = page.locator(`.station-marker[data-station="${station}"]`);
+  const before = await marker.innerText();
+  await slider.focus();
+  await slider.press("Home");
+  await expect.poll(async () => marker.innerText()).not.toBe(before);
 });
 
 test("timeline playback and scrubbing update the selected station frame", async ({
@@ -184,7 +205,7 @@ test("mobile station view is a dedicated page without map overlays", async ({ pa
 
   await page.getByRole("button", { name: "返回地图" }).first().click();
   await expect(page.locator(".maplibregl-canvas")).toBeVisible();
-  await expect(page.locator(".network-dock")).toBeVisible();
+  await expect(page.locator(".timeline-dock")).toBeVisible();
 });
 
 test("forecast layers stay disabled until a model provider is connected", async ({
@@ -217,9 +238,9 @@ test("dense station networks use compact clickable markers", async ({ page, requ
 
   await expect(page.locator(".map-view.has-field")).toBeVisible();
   await expect(page.getByText(/IDW 温度场/)).toBeVisible();
-  await page.getByRole("button", { name: "温度场", exact: true }).click();
+  await page.locator(".topbar__field-toggle").click();
   await expect(page.locator(".map-view.has-field")).toHaveCount(0);
-  await page.getByRole("button", { name: "显示温度场", exact: true }).click();
+  await page.locator(".topbar__field-toggle").click();
   await expect(page.locator(".map-view.has-field")).toBeVisible();
 
   await dense.dispatchEvent("click");

@@ -50,6 +50,7 @@ func New(service *measurement.Service, pinger Pinger, opts Options) (http.Handle
 	api := humachi.New(router, config)
 	registerHealth(api, pinger)
 	registerMeasurements(api, service, logger)
+	registerFrames(api, service, logger)
 
 	return router, api
 }

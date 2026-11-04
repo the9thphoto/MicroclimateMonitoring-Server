@@ -67,11 +67,33 @@ type ListInput struct {
 	Limit     int
 }
 
+// FrameQuery groups measurements into fixed time buckets.
+type FrameQuery struct {
+	Start time.Time
+	End   time.Time
+	Step  time.Duration
+}
+
+// Frame is one time bucket of network observations.
+type Frame struct {
+	Time     time.Time     `json:"time"`
+	Stations []Measurement `json:"stations"`
+}
+
+// FramesResponse is a bounded network time series.
+type FramesResponse struct {
+	Start  time.Time `json:"start"`
+	End    time.Time `json:"end"`
+	Step   int       `json:"step"`
+	Frames []Frame   `json:"frames"`
+}
+
 // Repository stores and retrieves measurements.
 type Repository interface {
 	Create(ctx context.Context, measurement Measurement) (Measurement, error)
 	List(ctx context.Context, filter ListInput) ([]Measurement, error)
 	Latest(ctx context.Context, stationID string) (Measurement, error)
+	Frames(ctx context.Context, query FrameQuery) ([]Frame, error)
 	Ping(ctx context.Context) error
 }
 
@@ -150,6 +172,20 @@ func (s *Service) List(ctx context.Context, input ListInput) ([]Measurement, err
 		Offset:    input.Offset,
 		Limit:     input.Limit,
 	})
+}
+
+// Frames returns latest observation per station in fixed buckets.
+func (s *Service) Frames(ctx context.Context, start, end time.Time, step time.Duration) ([]Frame, error) {
+	if !start.Before(end) {
+		return nil, &ValidationError{Field: "start", Message: "must be earlier than end"}
+	}
+	if step < time.Minute || step > time.Hour {
+		return nil, &ValidationError{Field: "step", Message: "must be between 60 and 3600 seconds"}
+	}
+	if end.Sub(start)/step > 2016 {
+		return nil, &ValidationError{Field: "step", Message: "creates too many frames"}
+	}
+	return s.repository.Frames(ctx, FrameQuery{Start: start.UTC(), End: end.UTC(), Step: step})
 }
 
 // Latest returns the newest measurement, optionally for one station.
