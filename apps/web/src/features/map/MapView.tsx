@@ -25,6 +25,7 @@ interface MapViewProps {
   mode: "overview" | "station" | "forecast";
   domain: [number, number];
   fields: MapField[];
+  windVisible: boolean;
   onSelectStation: (stationId: string) => void;
 }
 
@@ -99,11 +100,13 @@ export function MapView({
   mode,
   domain,
   fields,
+  windVisible,
   onSelectStation,
 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markerHandles = useRef<Map<string, MarkerHandle>>(new Map());
+  const windHandles = useRef<Map<string, maplibregl.Marker>>(new Map());
   const selectCallbackRef = useRef(onSelectStation);
   const initialFocusRef = useRef(focus);
   const hadFocusRef = useRef(Boolean(focus));
@@ -246,6 +249,49 @@ export function MapView({
       }
     }
   }, [markers, activeLayer, domain, ready, failed]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready || failed) {
+      return;
+    }
+    const visible = new Set<string>();
+    for (const data of markers) {
+      if (!windVisible || data.direction === null) {
+        continue;
+      }
+      let marker = windHandles.current.get(data.stationId);
+      if (!marker) {
+        const element = document.createElement("div");
+        element.className = "wind-arrow";
+        const arrow = document.createElement("span");
+        arrow.textContent = "↑";
+        element.append(arrow);
+        marker = new maplibregl.Marker({
+          element,
+          anchor: "center",
+          offset: [0, -24],
+        })
+          .setLngLat([data.location.longitude, data.location.latitude])
+          .addTo(map);
+        windHandles.current.set(data.stationId, marker);
+      }
+      marker.setLngLat([data.location.longitude, data.location.latitude]);
+      const element = marker.getElement();
+      const arrow = element.querySelector("span");
+      if (arrow) {
+        arrow.style.transform = `rotate(${(data.direction ?? 0) + 180}deg)`;
+      }
+      element.title = `${data.stationId}：风速 ${data.windSpeed ?? "—"} m/s，风向 ${data.direction ?? "—"}°`;
+      visible.add(data.stationId);
+    }
+    for (const [stationId, marker] of windHandles.current) {
+      if (!visible.has(stationId)) {
+        marker.remove();
+        windHandles.current.delete(stationId);
+      }
+    }
+  }, [markers, windVisible, ready, failed]);
 
   useEffect(() => {
     const map = mapRef.current;

@@ -107,6 +107,8 @@ export function App() {
         label: layer.label,
         shortLabel: layer.shortLabel,
         stops: layer.stops,
+        domain: layer.domain,
+        unit: layer.unit,
         available: layer.available(pointsForAvailability),
         active: overlayIds.includes(layer.id),
       })),
@@ -210,6 +212,7 @@ export function App() {
         stationId: station.stationId,
         location: station.location!,
         value: activeLayer.valueOf(point),
+        windSpeed: point.windSpeed ?? null,
         direction: point.windDirection ?? null,
         selected: station.stationId === state.station,
       };
@@ -388,6 +391,9 @@ export function App() {
                 mode={hasPanel ? "station" : "overview"}
                 domain={displayDomain}
                 fields={fields}
+                windVisible={
+                  !hasPanel && (overlayIds.includes("windSpeed") || state.layer === "windSpeed")
+                }
                 onSelectStation={selectStation}
               />
             </Suspense>

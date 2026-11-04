@@ -2411,3 +2411,22 @@ button:disabled {
 .overlay-chip:disabled {
   opacity: 0.38;
 }
+
+.overlay-chip__range {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 500;
+}
+
+.wind-arrow {
+  pointer-events: auto;
+  color: #b9d7df;
+  font-size: 14px;
+  line-height: 1;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+}
+
+.wind-arrow span {
+  display: block;
+  transform-origin: center;
+}

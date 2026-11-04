@@ -6,6 +6,7 @@ export interface MapStationMarker {
   stationId: string;
   location: StationLocation;
   value: number | null;
+  windSpeed: number | null;
   direction: number | null;
   selected: boolean;
 }

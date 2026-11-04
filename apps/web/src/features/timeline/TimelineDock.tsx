@@ -14,6 +14,8 @@ export interface OverlayOption {
   available: boolean;
   active: boolean;
   stops: string[];
+  domain: [number, number];
+  unit: string;
 }
 
 interface TimelineDockProps {
@@ -86,7 +88,11 @@ export function TimelineDock({
                 style={{ background: `linear-gradient(90deg, ${overlay.stops.join(", ")})` }}
                 aria-hidden="true"
               />
-              {overlay.shortLabel}
+              <span>{overlay.shortLabel}</span>
+              <span className="overlay-chip__range">
+                {overlay.domain[0]}–{overlay.domain[1]}
+                {overlay.unit}
+              </span>
             </button>
           ))}
         </div>

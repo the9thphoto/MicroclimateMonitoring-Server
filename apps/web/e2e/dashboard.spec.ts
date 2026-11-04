@@ -247,6 +247,8 @@ test("dense station networks use compact clickable markers", async ({ page, requ
   await expect(page.locator(".map-view.has-field")).toBeVisible();
   await humidityOverlay.click();
   await expect(page.locator(".overlay-chip.is-active")).toHaveCount(2);
+  await page.locator(".overlay-chip").filter({ hasText: "风" }).click();
+  await expect(page.locator(".wind-arrow").first()).toBeVisible();
 
   await dense.dispatchEvent("click");
   await expect(page.locator(".station-panel")).toBeVisible();
