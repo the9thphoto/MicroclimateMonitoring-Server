@@ -484,7 +484,7 @@ button:disabled {
 /* Map markers ------------------------------------------------------------- */
 
 .station-marker {
-  position: relative;
+  position: absolute;
   display: grid;
   place-items: center;
   padding: 0;
@@ -2353,4 +2353,19 @@ button:disabled {
 .station-marker.is-dense .station-marker__pulse {
   width: 28px;
   height: 28px;
+}
+
+.network-dock__field {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--muted);
+  font-size: 11px;
+  padding: 5px 10px;
+}
+
+.network-dock__field[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
 }

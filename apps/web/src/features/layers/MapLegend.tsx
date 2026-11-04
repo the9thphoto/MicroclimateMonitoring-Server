@@ -2,13 +2,15 @@ import type { LayerDefinition } from "../../lib/layers";
 
 interface MapLegendProps {
   layer: LayerDefinition;
+  domain?: [number, number];
+  source?: string;
 }
 
-export function MapLegend({ layer }: MapLegendProps) {
+export function MapLegend({ layer, domain = layer.domain, source }: MapLegendProps) {
   return (
     <section
       className="map-legend"
-      aria-label={`${layer.label}图例，${layer.domain[0]} 到 ${layer.domain[1]} ${layer.unit}`}
+      aria-label={`${layer.label}图例，${domain[0]} 到 ${domain[1]} ${layer.unit}`}
     >
       <div className="map-legend__head">
         <span>{layer.label}</span>
@@ -20,10 +22,10 @@ export function MapLegend({ layer }: MapLegendProps) {
         aria-hidden="true"
       />
       <div className="map-legend__ticks">
-        <span>{layer.domain[0]}</span>
-        <span>{layer.domain[1]}</span>
+        <span>{domain[0]}</span>
+        <span>{domain[1]}</span>
       </div>
-      <span className="map-legend__source">站点观测 · 非空间插值</span>
+      <span className="map-legend__source">{source ?? "站点观测 · 非空间插值"}</span>
     </section>
   );
 }

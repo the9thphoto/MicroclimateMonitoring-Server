@@ -21,6 +21,7 @@ import { useMediaQuery } from "./hooks/useMediaQuery";
 import { useStationDirectory } from "./hooks/useStationDirectory";
 import { useTimeline } from "./hooks/useTimeline";
 import { dataQuality, toAnalysisPoints } from "./lib/analysis";
+import { buildTemperatureField } from "./lib/field";
 import { LAYERS, type LayerId, layerById } from "./lib/layers";
 import {
   buildNetworkStations,
@@ -46,6 +47,7 @@ export function App() {
   const [state, setState] = useState<AppUrlState>(() => appStateFromSearch(window.location.search));
   const [pickerOpen, setPickerOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [fieldVisible, setFieldVisible] = useState(true);
   const isMobile = useMediaQuery("(max-width: 700px)");
 
   const latest = useLatest(state.station);
@@ -64,6 +66,7 @@ export function App() {
     () => visibleStations.find((station) => station.stationId === state.station) ?? null,
     [visibleStations, state.station],
   );
+  const hasPanel = state.view === "station" && Boolean(selectedStation);
   const rows = useMemo(() => history.data ?? [], [history.data]);
   const allPoints = useMemo(
     () => toAnalysisPoints(rows, rangeMs, Math.max(rows.length, 1)),
@@ -81,6 +84,13 @@ export function App() {
   const availability = useMemo(() => networkAvailability(visibleStations), [visibleStations]);
   const unlocated = useMemo(() => unlocatedCount(networkStations), [networkStations]);
   const lastUpdated = useMemo(() => latestNetworkTime(visibleStations), [visibleStations]);
+  const fieldAvailable = activeLayer.id === "temperature" && visibleStations.length >= 3;
+  const field = useMemo(
+    () =>
+      fieldAvailable && fieldVisible && !hasPanel ? buildTemperatureField(visibleStations) : null,
+    [fieldAvailable, fieldVisible, hasPanel, visibleStations],
+  );
+  const displayDomain = field?.domain ?? activeLayer.domain;
 
   const updateState = useCallback((patch: Partial<AppUrlState>) => {
     setState((previous) => {
@@ -272,7 +282,6 @@ export function App() {
     );
   }
 
-  const hasPanel = state.view === "station" && Boolean(selectedStation);
   const mobileStation = isMobile && hasPanel;
 
   return (
@@ -316,6 +325,8 @@ export function App() {
                 activeLayer={activeLayer}
                 focus={focus}
                 mode={hasPanel ? "station" : "overview"}
+                domain={displayDomain}
+                field={field}
                 onSelectStation={selectStation}
               />
             </Suspense>
@@ -341,6 +352,7 @@ export function App() {
               onToggle={timeline.toggle}
               onSpeedChange={timeline.setSpeed}
               onToLatest={timeline.toLatest}
+              domain={displayDomain}
               compact={isMobile}
             />
           ) : (
@@ -348,8 +360,13 @@ export function App() {
               stations={visibleStations}
               unlocated={unlocated}
               layer={activeLayer}
+              domain={displayDomain}
               lastUpdated={lastUpdated}
               loading={directory.isLoading}
+              fieldAvailable={fieldAvailable}
+              fieldVisible={fieldVisible}
+              fieldSource={field ? `IDW 温度场 · ${field.stationCount} 站` : undefined}
+              onToggleField={() => setFieldVisible((visible) => !visible)}
               onRefresh={() => void directory.refetch()}
             />
           )}

@@ -2,6 +2,8 @@ import * as maplibregl from "maplibre-gl";
 import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
 import { useEffect, useRef, useState } from "react";
 
+import { colorForValue, hexToRgb } from "../../lib/colors";
+import type { TemperatureField } from "../../lib/field";
 import type { LayerDefinition } from "../../lib/layers";
 import { formatLayerValue, layerColor } from "../../lib/layers";
 import { CAMPUS_LOCATION, type StationLocation } from "../../lib/location";
@@ -14,6 +16,8 @@ interface MapViewProps {
   activeLayer: LayerDefinition;
   focus: StationLocation | null;
   mode: "overview" | "station" | "forecast";
+  domain: [number, number];
+  field: TemperatureField | null;
   onSelectStation: (stationId: string) => void;
 }
 
@@ -27,9 +31,14 @@ maplibregl.setWorkerUrl(maplibreWorkerUrl);
 const INITIAL_CENTER: [number, number] = [CAMPUS_LOCATION.longitude, CAMPUS_LOCATION.latitude];
 const INITIAL_ZOOM = 14;
 
-function updateMarker(handle: MarkerHandle, data: MapStationMarker, activeLayer: LayerDefinition) {
+function updateMarker(
+  handle: MarkerHandle,
+  data: MapStationMarker,
+  activeLayer: LayerDefinition,
+  domain: [number, number],
+) {
   const { element } = handle;
-  const color = layerColor(activeLayer, data.value);
+  const color = layerColor(activeLayer, data.value, domain);
   element.style.setProperty("--marker-color", color);
   element.classList.toggle("is-selected", data.selected);
   element.dataset.station = data.stationId;
@@ -76,7 +85,15 @@ function createMarkerElement(stationId: string, onSelect: (id: string) => void):
   return element;
 }
 
-export function MapView({ markers, activeLayer, focus, mode, onSelectStation }: MapViewProps) {
+export function MapView({
+  markers,
+  activeLayer,
+  focus,
+  mode,
+  domain,
+  field,
+  onSelectStation,
+}: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markerHandles = useRef<Map<string, MarkerHandle>>(new Map());
@@ -208,7 +225,7 @@ export function MapView({ markers, activeLayer, focus, mode, onSelectStation }: 
         handle = { marker, element };
         markerHandles.current.set(data.stationId, handle);
       }
-      updateMarker(handle, data, activeLayer);
+      updateMarker(handle, data, activeLayer, domain);
       handle.element.classList.toggle("show-name", showNames);
       handle.element.classList.toggle("is-dense", dense && !data.selected);
       handle.marker.setLngLat([longitude, latitude]);
@@ -221,7 +238,76 @@ export function MapView({ markers, activeLayer, focus, mode, onSelectStation }: 
         markerHandles.current.delete(stationId);
       }
     }
-  }, [markers, activeLayer, ready, failed]);
+  }, [markers, activeLayer, domain, ready, failed]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready || failed || (styleFallback && !map.isStyleLoaded())) {
+      return;
+    }
+    const layerId = "temperature-field";
+    const sourceId = "temperature-field";
+    const remove = () => {
+      if (map.getLayer(layerId)) {
+        map.removeLayer(layerId);
+      }
+      if (map.getSource(sourceId)) {
+        map.removeSource(sourceId);
+      }
+    };
+    remove();
+    if (!field) {
+      return remove;
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = field.width;
+    canvas.height = field.height;
+    const context = canvas.getContext("2d");
+    if (!context) {
+      return remove;
+    }
+    const image = context.createImageData(field.width, field.height);
+    for (let index = 0; index < field.values.length; index += 1) {
+      const value = field.values[index];
+      if (value === undefined || !Number.isFinite(value)) {
+        continue;
+      }
+      const [red, green, blue] = hexToRgb(colorForValue(value, domain, activeLayer.stops));
+      const offset = index * 4;
+      image.data[offset] = red;
+      image.data[offset + 1] = green;
+      image.data[offset + 2] = blue;
+      image.data[offset + 3] = Math.round((field.alpha[index] ?? 0) * 235);
+    }
+    context.putImageData(image, 0, 0);
+    const { west, east, south, north } = field.bounds;
+    map.addSource(sourceId, {
+      type: "image",
+      url: canvas.toDataURL("image/png"),
+      coordinates: [
+        [west, north],
+        [east, north],
+        [east, south],
+        [west, south],
+      ],
+    });
+    const firstSymbol = map.getStyle().layers?.find((layer) => layer.type === "symbol")?.id;
+    map.addLayer(
+      {
+        id: layerId,
+        type: "raster",
+        source: sourceId,
+        paint: {
+          "raster-opacity": 0.55,
+          "raster-resampling": "linear",
+          "raster-fade-duration": 0,
+        },
+      },
+      firstSymbol,
+    );
+    return remove;
+  }, [field, ready, failed, styleFallback, activeLayer, domain]);
 
   const fitAll = () => {
     const map = mapRef.current;
@@ -250,7 +336,11 @@ export function MapView({ markers, activeLayer, focus, mode, onSelectStation }: 
   };
 
   return (
-    <div className={["map-view", styleFallback ? "is-fallback" : ""].filter(Boolean).join(" ")}>
+    <div
+      className={["map-view", field ? "has-field" : "", styleFallback ? "is-fallback" : ""]
+        .filter(Boolean)
+        .join(" ")}
+    >
       <div ref={containerRef} className="map-view__canvas" />
       {failed ? (
         <MapFallback

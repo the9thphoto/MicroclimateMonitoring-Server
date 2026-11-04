@@ -6,8 +6,13 @@ interface NetworkDockProps {
   stations: NetworkStation[];
   unlocated: number;
   layer: LayerDefinition;
+  domain: [number, number];
   lastUpdated: string | null;
   loading: boolean;
+  fieldAvailable: boolean;
+  fieldVisible: boolean;
+  fieldSource?: string;
+  onToggleField: () => void;
   onRefresh: () => void;
 }
 
@@ -31,8 +36,13 @@ export function NetworkDock({
   stations,
   unlocated,
   layer,
+  domain,
   lastUpdated,
   loading,
+  fieldAvailable,
+  fieldVisible,
+  fieldSource,
+  onToggleField,
   onRefresh,
 }: NetworkDockProps) {
   return (
@@ -44,12 +54,23 @@ export function NetworkDock({
           {unlocated > 0 ? `${unlocated} 个站点未上报坐标` : "全部站点已定位"}
         </span>
         <span className="network-dock__muted">最后更新 {updatedLabel(lastUpdated)}</span>
+        {fieldAvailable ? (
+          <button
+            type="button"
+            className="network-dock__field"
+            aria-pressed={fieldVisible}
+            onClick={onToggleField}
+            title={fieldVisible ? "隐藏温度场" : "显示温度场"}
+          >
+            {fieldVisible ? "温度场" : "显示温度场"}
+          </button>
+        ) : null}
         <button type="button" className="network-dock__refresh" onClick={onRefresh}>
           {loading ? "刷新中…" : "刷新"}
         </button>
       </div>
       <div className="network-dock__body">
-        <MapLegend layer={layer} />
+        <MapLegend layer={layer} domain={domain} source={fieldSource} />
         <p className="network-dock__hint">点击站点查看时间序列</p>
       </div>
     </section>

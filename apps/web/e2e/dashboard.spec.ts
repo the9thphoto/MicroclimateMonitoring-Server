@@ -30,20 +30,34 @@ async function mockMap(page: Page) {
   await page.route("https://tile.openstreetmap.org/**", (route) => route.abort());
 }
 
+function defaultCoordinates(station: string): { latitude: number; longitude: number } {
+  let hash = 0;
+  for (const character of station) {
+    hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+  }
+  return {
+    latitude: 32.0839 + ((hash % 17) - 8) * 0.0015,
+    longitude: 118.6361 + (((hash >>> 8) % 17) - 8) * 0.0015,
+  };
+}
+
 async function seedStation(
   request: APIRequestContext,
   station: string,
   count = 4,
-  latitude = 32.0839058,
-  longitude = 118.6361144,
+  latitude?: number,
+  longitude?: number,
 ) {
+  const fallback = defaultCoordinates(station);
+  const lat = latitude ?? fallback.latitude;
+  const lon = longitude ?? fallback.longitude;
   const now = Date.now();
   for (let index = 0; index < count; index += 1) {
     const response = await request.post(`${apiBaseURL}/api/v1/measurements`, {
       data: {
         station_id: station,
-        latitude,
-        longitude,
+        latitude: lat,
+        longitude: lon,
         observed_at: new Date(now - index * 60_000).toISOString(),
         temperature: 23.4 - index * 0.4,
         humidity: 56.7 - index * 0.5,
@@ -80,6 +94,11 @@ test("network map shows all reported stations and switches layers without select
   await expect(page.locator(`.station-marker[data-station="${main}"]`)).toBeVisible();
   await expect(page.locator(`.station-marker[data-station="${north}"]`)).toBeVisible();
   await expect(page.locator(`.station-marker[data-station="${east}"]`)).toBeVisible();
+  expect(
+    await page
+      .locator(`.station-marker[data-station="${main}"]`)
+      .evaluate((element) => getComputedStyle(element).position),
+  ).toBe("absolute");
 
   const temperature = page.getByRole("button", { name: "温度", exact: true });
   const humidity = page.getByRole("button", { name: "湿度", exact: true });
@@ -195,6 +214,13 @@ test("dense station networks use compact clickable markers", async ({ page, requ
   await expect(page.locator(".station-marker").first()).toBeVisible();
   const dense = page.locator(".station-marker.is-dense").first();
   await expect(dense).toBeVisible();
+
+  await expect(page.locator(".map-view.has-field")).toBeVisible();
+  await expect(page.getByText(/IDW 温度场/)).toBeVisible();
+  await page.getByRole("button", { name: "温度场", exact: true }).click();
+  await expect(page.locator(".map-view.has-field")).toHaveCount(0);
+  await page.getByRole("button", { name: "显示温度场", exact: true }).click();
+  await expect(page.locator(".map-view.has-field")).toBeVisible();
 
   await dense.click();
   await expect(page.locator(".station-panel")).toBeVisible();

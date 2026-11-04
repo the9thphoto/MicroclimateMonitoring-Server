@@ -90,8 +90,12 @@ export function layerById(id: string | null | undefined): LayerDefinition {
   return LAYERS.find((layer) => layer.id === id) ?? LAYERS[0]!;
 }
 
-export function layerColor(layer: LayerDefinition, value: number | null): string {
-  return colorForValue(value, layer.domain, layer.stops);
+export function layerColor(
+  layer: LayerDefinition,
+  value: number | null,
+  domain: [number, number] = layer.domain,
+): string {
+  return colorForValue(value, domain, layer.stops);
 }
 
 export function layerValue(layer: LayerDefinition, point: AnalysisPoint | null): number | null {
