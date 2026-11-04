@@ -1,0 +1,151 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  DATABASE_URL: postgresql://weather:weather@127.0.0.1:55432/weather_test
+  TEST_DATABASE_URL: postgresql://weather:weather@127.0.0.1:55432/weather_test
+
+jobs:
+  api:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: weather_test
+          POSTGRES_USER: weather
+          POSTGRES_PASSWORD: weather
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U weather -d weather_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v7
+      - name: Link node for act action post steps
+        if: ${{ env.ACT == 'true' }}
+        run: sudo ln -sf "$(command -v node)" /usr/local/bin/node
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: apps/api/go.mod
+          cache: false
+      - name: Check formatting
+        working-directory: apps/api
+        run: test -z "$(gofmt -l .)"
+      - name: Vet
+        working-directory: apps/api
+        run: go vet ./...
+      - name: Test
+        working-directory: apps/api
+        run: go test -p 1 ./...
+      - name: Build
+        working-directory: apps/api
+        run: go build ./...
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Link node for act action post steps
+        if: ${{ env.ACT == 'true' }}
+        run: sudo ln -sf "$(command -v node)" /usr/local/bin/node
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+
+  contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Link node for act action post steps
+        if: ${{ env.ACT == 'true' }}
+        run: sudo ln -sf "$(command -v node)" /usr/local/bin/node
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: apps/api/go.mod
+          cache: false
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm gen:api
+      - run: git diff --exit-code -- packages/contracts/openapi.json packages/contracts/src/schema.ts
+
+  e2e:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://weather:weather@127.0.0.1:55433/weather_test
+      TEST_DATABASE_URL: postgresql://weather:weather@127.0.0.1:55433/weather_test
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: weather_test
+          POSTGRES_USER: weather
+          POSTGRES_PASSWORD: weather
+        ports:
+          - 55433:5432
+        options: >-
+          --health-cmd "pg_isready -U weather -d weather_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v7
+      - name: Link node for act action post steps
+        if: ${{ env.ACT == 'true' }}
+        run: sudo ln -sf "$(command -v node)" /usr/local/bin/node
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: apps/api/go.mod
+          cache: false
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @microclimate/web exec playwright install --with-deps chromium
+      - run: pnpm --filter @microclimate/web build
+      - run: pnpm --filter @microclimate/web exec playwright test
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report
+          if-no-files-found: ignore
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build database image
+        if: ${{ env.ACT != 'true' }}
+        run: docker build -f docker/db/Dockerfile -t microclimate-db docker
+      - name: Build API image
+        if: ${{ env.ACT != 'true' }}
+        run: docker build -f apps/api/Dockerfile -t microclimate-api apps/api
+      - name: Build web image
+        if: ${{ env.ACT != 'true' }}
+        run: docker build -f apps/web/Dockerfile -t microclimate-web .

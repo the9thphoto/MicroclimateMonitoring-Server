@@ -1,0 +1,21 @@
+{
+  "name": "microclimate-monitor-server",
+  "private": true,
+  "packageManager": "pnpm@11.25.0",
+  "scripts": {
+    "dev": "pnpm --filter @microclimate/web dev",
+    "build": "pnpm --filter @microclimate/web build",
+    "preview": "pnpm --filter @microclimate/web preview",
+    "lint": "biome ci .",
+    "format": "biome check --write .",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test": "pnpm -r --if-present test",
+    "e2e": "pnpm --filter @microclimate/web e2e",
+    "gen:api": "go -C apps/api run ./cmd/openapi > packages/contracts/openapi.json && openapi-typescript packages/contracts/openapi.json -o packages/contracts/src/schema.ts",
+    "ci": "act push"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.6.4",
+    "openapi-typescript": "7.13.0"
+  }
+}

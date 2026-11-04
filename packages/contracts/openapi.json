@@ -1,0 +1,480 @@
+{
+  "components": {
+    "schemas": {
+      "ErrorDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "location": {
+            "description": "Where the error occurred, e.g. 'body.items[3].tags' or 'path.thing-id'",
+            "type": "string"
+          },
+          "message": {
+            "description": "Error message text",
+            "type": "string"
+          },
+          "value": {
+            "description": "The value at the given location"
+          }
+        },
+        "type": "object"
+      },
+      "ErrorModel": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "description": "A human-readable explanation specific to this occurrence of the problem.",
+            "examples": [
+              "Property foo is required but is missing."
+            ],
+            "type": "string"
+          },
+          "errors": {
+            "description": "Optional list of individual error details",
+            "items": {
+              "$ref": "#/components/schemas/ErrorDetail"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "instance": {
+            "description": "A URI reference that identifies the specific occurrence of the problem.",
+            "examples": [
+              "https://example.com/error-log/abc123"
+            ],
+            "format": "uri",
+            "type": "string"
+          },
+          "status": {
+            "description": "HTTP status code",
+            "examples": [
+              400
+            ],
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "A short, human-readable summary of the problem type. This value should not change between occurrences of the error.",
+            "examples": [
+              "Bad Request"
+            ],
+            "type": "string"
+          },
+          "type": {
+            "default": "about:blank",
+            "description": "A URI reference to human-readable documentation for the error.",
+            "examples": [
+              "https://example.com/errors/example"
+            ],
+            "format": "uri",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "HealthOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "examples": [
+              "ok"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "type": "object"
+      },
+      "Measurement": {
+        "additionalProperties": false,
+        "properties": {
+          "co2": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "humidity": {
+            "format": "double",
+            "type": "number"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "pm10": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "pm25": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "received_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "station_id": {
+            "type": "string"
+          },
+          "temperature": {
+            "format": "double",
+            "type": "number"
+          },
+          "wind_direction": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "wind_speed": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "station_id",
+          "observed_at",
+          "received_at",
+          "wind_speed",
+          "wind_direction",
+          "temperature",
+          "humidity",
+          "co2",
+          "pm25",
+          "pm10"
+        ],
+        "type": "object"
+      },
+      "MeasurementBody": {
+        "additionalProperties": false,
+        "properties": {
+          "co2": {
+            "description": "二氧化碳 ppm",
+            "format": "double",
+            "maximum": 100000,
+            "minimum": 0,
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "humidity": {
+            "description": "湿度 %",
+            "format": "double",
+            "maximum": 100,
+            "minimum": 0,
+            "type": "number"
+          },
+          "observed_at": {
+            "description": "采集时间，必须带时区；省略时使用服务器时间",
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "pm10": {
+            "description": "PM10 μg/m³",
+            "format": "double",
+            "maximum": 10000,
+            "minimum": 0,
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "pm25": {
+            "description": "PM2.5 μg/m³",
+            "format": "double",
+            "maximum": 10000,
+            "minimum": 0,
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "station_id": {
+            "description": "监测站标识",
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "temperature": {
+            "description": "温度 °C",
+            "format": "double",
+            "maximum": 100,
+            "minimum": -100,
+            "type": "number"
+          },
+          "wind_direction": {
+            "description": "风向 度",
+            "format": "double",
+            "maximum": 360,
+            "minimum": 0,
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "wind_speed": {
+            "description": "风速 m/s",
+            "format": "double",
+            "maximum": 100,
+            "minimum": 0,
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "station_id",
+          "temperature",
+          "humidity"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "校园风速、风向、温湿度、二氧化碳和颗粒物监测接口",
+    "title": "Campus Weather Monitor API",
+    "version": "1.0.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/v1/measurements": {
+      "get": {
+        "operationId": "list-measurements",
+        "parameters": [
+          {
+            "description": "按站点筛选",
+            "explode": false,
+            "in": "query",
+            "name": "station_id",
+            "schema": {
+              "description": "按站点筛选",
+              "maxLength": 64,
+              "type": "string"
+            }
+          },
+          {
+            "description": "起始时间，必须带时区",
+            "explode": false,
+            "in": "query",
+            "name": "start",
+            "schema": {
+              "description": "起始时间，必须带时区",
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "description": "结束时间，必须带时区",
+            "explode": false,
+            "in": "query",
+            "name": "end",
+            "schema": {
+              "description": "结束时间，必须带时区",
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "description": "跳过条数",
+            "explode": false,
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "default": 0,
+              "description": "跳过条数",
+              "format": "int64",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "返回条数",
+            "explode": false,
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 100,
+              "description": "返回条数",
+              "format": "int64",
+              "maximum": 1000,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Measurement"
+                  },
+                  "type": [
+                    "array",
+                    "null"
+                  ]
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "查询历史测量数据",
+        "tags": [
+          "measurements"
+        ]
+      },
+      "post": {
+        "operationId": "create-measurement",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MeasurementBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Measurement"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "上报测量数据",
+        "tags": [
+          "measurements"
+        ]
+      }
+    },
+    "/api/v1/measurements/latest": {
+      "get": {
+        "operationId": "latest-measurement",
+        "parameters": [
+          {
+            "description": "按站点筛选",
+            "explode": false,
+            "in": "query",
+            "name": "station_id",
+            "schema": {
+              "description": "按站点筛选",
+              "maxLength": 64,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Measurement"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "查询最新测量数据",
+        "tags": [
+          "measurements"
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "health",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Health check",
+        "tags": [
+          "system"
+        ]
+      }
+    }
+  }
+}

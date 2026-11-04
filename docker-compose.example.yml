@@ -1,23 +1,16 @@
 # Copy to docker-compose.yml (ignored by git) and adjust credentials and ports.
 services:
-  api:
-    build: .
-    environment:
-      DATABASE_URL: postgresql+psycopg://weather:weather@db:5432/weather
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
-    ports:
-      - "${PORT:-8000}:8000"
-    depends_on:
-      db:
-        condition: service_healthy
-    restart: unless-stopped
-
   db:
-    image: postgres:17-alpine
+    build:
+      context: ./docker
+      dockerfile: db/Dockerfile
+    image: microclimate-db:local
     environment:
       POSTGRES_DB: weather
       POSTGRES_USER: weather
       POSTGRES_PASSWORD: weather
+    ports:
+      - "127.0.0.1:${DB_PORT:-5433}:5432"
     volumes:
       - weather-data:/var/lib/postgresql/data
     healthcheck:
@@ -25,6 +18,36 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ./apps/api
+    environment:
+      DATABASE_URL: postgresql://weather:weather@db:5432/weather
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080}
+      PORT: "8000"
+    ports:
+      - "${API_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/app/api", "healthcheck"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      api:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:

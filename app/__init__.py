@@ -1,1 +1,0 @@
-"""Campus weather monitoring API."""

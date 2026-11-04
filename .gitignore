@@ -1,8 +1,10 @@
-__pycache__/
-*.py[cod]
-.pytest_cache/
-.venv/
+node_modules/
+dist/
+coverage/
+playwright-report/
+test-results/
+*.local
 .env
 docker-compose.yml
-data/
-tests/test_weather.db
+.DS_Store
+apps/api/bin/

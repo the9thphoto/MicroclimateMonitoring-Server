@@ -1,396 +1,282 @@
-校园气候监测后端参数说明
+校园微气候监测后端参数说明
 ========================================
 
 一、服务概览
 ----------------------------------------
 服务名称：Campus Weather Monitor API
+技术栈：Go 1.27、chi、Huma、pgx、goose、PostgreSQL
 默认监听端口：8000
 API 文档：/docs
 OpenAPI 描述：/openapi.json
 健康检查：GET /health
+前端仪表盘：apps/web（默认开发端口 5173，容器端口 8080）
 
-测量数据接口前缀：/api/v1
-数据格式：HTTP JSON，请求头 Content-Type 必须为 application/json。
-时间格式：ISO 8601。允许省略 observed_at，省略时使用服务器接收时间。
-时间时区：提交 observed_at 时必须携带时区，例如 +08:00 或 Z。
-数据存储：所有采集时间统一转换为 UTC。
-站点标识：station_id 用于区分不同监测站，最长 64 个字符，不能为空白。
+设备通过 HTTP 直接上报，固件仓库与 C/ESP-IDF 实现保持不变。
 
-二、上报测量数据
+二、数据表
 ----------------------------------------
-请求方法：POST
-请求路径：/api/v1/measurements
-成功状态码：201 Created
-
-请求字段：
-
-1. station_id
-   类型：string
-   是否必填：是
-   长度：1-64 个字符
-   说明：监测站唯一标识，前后空白会自动去除。
-   示例：station-01
-
-2. observed_at
-   类型：ISO 8601 string
-   是否必填：否
-   默认值：服务器当前接收时间
-   说明：传感器采集时间，必须携带时区。
-   示例：2026-10-29T08:30:00+08:00
-
-3. temperature
-   类型：number
-   是否必填：是
-   单位：摄氏度（°C）
-   范围：-100 至 100
-   说明：空气温度。
-   示例：21.6
-
-4. humidity
-   类型：number
-   是否必填：是
-   单位：百分比（%）
-   范围：0-100
-   说明：相对湿度。
-   示例：63
-
-5. wind_speed
-   类型：number 或 null
-   是否必填：否
-   单位：m/s
-   范围：0-100
-   说明：风速。设备没有该传感器时省略或传 null，数据库保存为 NULL。
-   示例：2.8
-
-6. wind_direction
-   类型：number 或 null
-   是否必填：否
-   单位：度（°）
-   范围：0-360
-   说明：风向角度。0° 为正北，90° 为正东，180° 为正南，270° 为正西。缺失时保存为 NULL。
-   示例：135
-
-7. co2
-   类型：number 或 null
-   是否必填：否
-   单位：ppm
-   范围：0-100000
-   说明：二氧化碳浓度。缺失时保存为 NULL。
-   示例：418
-
-8. pm25
-   类型：number 或 null
-   是否必填：否
-   单位：微克每立方米（μg/m³）
-   范围：0-10000
-   说明：PM2.5 颗粒物浓度。缺失时保存为 NULL。
-   示例：18
-
-9. pm10
-   类型：number 或 null
-   是否必填：否
-   单位：微克每立方米（μg/m³）
-   范围：0-10000
-   说明：PM10 颗粒物浓度。缺失时保存为 NULL。
-   示例：34
-
-完整请求示例：
-
-{
-  "station_id": "station-01",
-  "observed_at": "2026-10-29T08:30:00+08:00",
-  "wind_speed": 2.8,
-  "wind_direction": 135,
-  "temperature": 21.6,
-  "humidity": 63,
-  "co2": 418,
-  "pm25": 18,
-  "pm10": 34
-}
-
-设备最小请求示例（只有温湿度，可选指标省略）：
-
-{
-  "station_id": "station-01",
-  "observed_at": "2026-11-04T08:30:00Z",
-  "temperature": 21.6,
-  "humidity": 63.0
-}
-
-响应字段：
+表名：measurements
+迁移工具：goose（版本表 goose_db_version）
+迁移文件：apps/api/internal/platform/migrate/sql/
 
 id
-  类型：integer
-  说明：数据库记录编号。
+  类型：SERIAL，主键，自增。
+
+station_id
+  类型：VARCHAR(64)，非空，建立单列索引。
+
+observed_at
+  类型：TIMESTAMPTZ，非空，建立单列索引。
+  说明：传感器采集时间，统一存为 UTC。
 
 received_at
-  类型：ISO 8601 string
-  说明：服务器接收并保存数据的时间，响应中统一为 UTC。
+  类型：TIMESTAMPTZ，非空。
+  说明：服务器接收时间，统一存为 UTC。
 
-其余字段与请求字段一致。observed_at 响应值统一为 UTC。请求中省略或传 null 的可选字段在响应中为 null。
+temperature
+  类型：DOUBLE PRECISION，非空，单位 °C。
 
-完整响应示例：
+humidity
+  类型：DOUBLE PRECISION，非空，单位 %。
 
-{
-  "station_id": "station-01",
-  "observed_at": "2026-10-29T00:30:00Z",
-  "wind_speed": 2.8,
-  "wind_direction": 135.0,
-  "temperature": 21.6,
-  "humidity": 63.0,
-  "co2": 418.0,
-  "pm25": 18.0,
-  "pm10": 34.0,
-  "id": 1,
-  "received_at": "2026-10-29T00:30:02.123456Z"
-}
+wind_speed
+  类型：DOUBLE PRECISION 或 NULL，单位 m/s。
 
-设备最小响应示例：
+wind_direction
+  类型：DOUBLE PRECISION 或 NULL，单位度。
 
-{
-  "station_id": "station-01",
-  "observed_at": "2026-11-04T00:30:00Z",
-  "wind_speed": null,
-  "wind_direction": null,
-  "temperature": 21.6,
-  "humidity": 63.0,
-  "co2": null,
-  "pm25": null,
-  "pm10": null,
-  "id": 2,
-  "received_at": "2026-11-04T00:30:01.234567Z"
-}
+co2
+  类型：DOUBLE PRECISION 或 NULL，单位 ppm。
 
-PowerShell 调用示例：
+pm25
+  类型：DOUBLE PRECISION 或 NULL，单位 μg/m³。
 
-$body = @{
-  station_id = "station-01"
-  observed_at = "2026-10-29T08:30:00+08:00"
-  wind_speed = 2.8
-  wind_direction = 135
-  temperature = 21.6
-  humidity = 63
-  co2 = 418
-  pm25 = 18
-  pm10 = 34
-} | ConvertTo-Json
+pm10
+  类型：DOUBLE PRECISION 或 NULL，单位 μg/m³。
 
-Invoke-RestMethod `
-  -Method Post `
-  -Uri "http://127.0.0.1:8000/api/v1/measurements" `
-  -ContentType "application/json" `
-  -Body $body
+索引：
+  ix_measurements_station_id (station_id)
+  ix_measurements_observed_at (observed_at)
+  ix_measurements_station_observed (station_id, observed_at)
 
-三、查询历史数据
+三、上报测量数据
 ----------------------------------------
-请求方法：GET
-请求路径：/api/v1/measurements
-成功状态码：200 OK
-返回类型：JSON 数组，按 observed_at 倒序排列，同一时间按 id 倒序排列。
+POST /api/v1/measurements
+Content-Type: application/json
+
+请求字段：
+  station_id      必填，字符串，1–64 字符，去空白后不能为空。
+  observed_at     可选，带时区的 ISO 8601 时间；省略时使用服务器当前 UTC 时间。
+  temperature     必填，-100–100。
+  humidity        必填，0–100。
+  wind_speed      可选，0–100，或 null。
+  wind_direction  可选，0–360，或 null。
+  co2             可选，0–100000，或 null。
+  pm25            可选，0–10000，或 null。
+  pm10            可选，0–10000，或 null。
+
+成功响应：201 Created
+  {
+    "id": 1,
+    "station_id": "station-01",
+    "observed_at": "2026-11-04T00:30:00Z",
+    "received_at": "2026-11-04T00:30:01Z",
+    "temperature": 21.6,
+    "humidity": 63,
+    "wind_speed": null,
+    "wind_direction": null,
+    "co2": null,
+    "pm25": null,
+    "pm10": null
+  }
+
+说明：
+- 省略可选字段与显式传 null 等价，数据库保存为 NULL。
+- 响应中的可选字段始终存在，不会用 0 冒充缺失值。
+- 时间统一以 UTC 返回。
+
+四、查询历史数据
+----------------------------------------
+GET /api/v1/measurements
 
 查询参数：
+  station_id  可选，按站点筛选；空白视为不筛选。
+  start       可选，带时区 ISO 8601，闭区间起点。
+  end         可选，带时区 ISO 8601，闭区间终点。
+  offset      可选，默认 0，必须 >= 0。
+  limit       可选，默认 100，范围 1–1000。
 
-station_id
-  是否必填：否
-  类型：string
-  说明：按监测站筛选，不能为空白。
+排序：observed_at DESC, id DESC
+成功响应：200，JSON 数组。
 
-start
-  是否必填：否
-  类型：ISO 8601 string
-  说明：采集时间下限，包含该时间点，必须携带时区。
+错误：
+  422 start 晚于 end、时间缺少时区、limit/offset 越界。
 
-end
-  是否必填：否
-  类型：ISO 8601 string
-  说明：采集时间上限，包含该时间点，必须携带时区。
-
-offset
-  是否必填：否
-  类型：integer
-  默认值：0
-  最小值：0
-  说明：跳过的记录数。
-
-limit
-  是否必填：否
-  类型：integer
-  默认值：100
-  最小值：1
-  最大值：1000
-  说明：单次最多返回的记录数。
-
-组合查询示例：
-
-GET /api/v1/measurements?station_id=station-01&start=2026-10-29T00:00:00%2B08:00&end=2026-10-29T23:59:59%2B08:00&offset=0&limit=100
-
-约束：start 不能晚于 end。
-
-四、查询最新数据
+五、查询最新数据
 ----------------------------------------
-请求方法：GET
-请求路径：/api/v1/measurements/latest
-成功状态码：200 OK
-
-查询参数：
-
-station_id
-  是否必填：否
-  类型：string
-  说明：指定站点时返回该站点 observed_at 最新的一条记录。
-            不指定时返回全部站点中 observed_at 最新的一条记录。
-
-示例：
-
 GET /api/v1/measurements/latest?station_id=station-01
 
-站点没有数据时返回 404 Not Found。
+station_id 可选；不传时返回全部站点中最新的一条。
+有数据：200，单条测量。
+无数据：404，problem+json。
 
-五、健康检查
+六、健康检查
 ----------------------------------------
-请求方法：GET
-请求路径：/health
-成功状态码：200 OK
+GET /health
+数据库可用：200 {"status":"ok"}
+数据库不可用：503 problem+json
 
-响应示例：
-
-{
-  "status": "ok"
-}
-
-该接口会执行一次数据库查询；数据库不可用时不会返回正常状态。
-
-六、状态码
+七、错误响应
 ----------------------------------------
-200 OK
-  查询成功或健康检查成功。
+统一使用 RFC 9457 problem+json：
 
-201 Created
-  测量数据保存成功。
+  {
+    "title": "Unprocessable Entity",
+    "status": 422,
+    "detail": "station_id: must not be blank"
+  }
 
-404 Not Found
-  查询最新数据时没有找到匹配记录。
+400 Bad Request
+  请求体不是合法 JSON，包括 NaN/Infinity 字面量。
+
+415 Unsupported Media Type
+  Content-Type 不是 application/json。
 
 422 Unprocessable Entity
-  字段类型错误、数值越界、station_id 为空白、时间缺少时区，
-  或 start 晚于 end。
+  字段缺失、类型错误、数值越界、station_id 空白或过长、时间缺少时区、
+  start 晚于 end、limit/offset 越界。
 
 500 Internal Server Error
   数据库或其他服务端异常。
 
-七、数据库字段
-----------------------------------------
-表名：measurements
-
-id
-  类型：整数，主键，自增。
-
-station_id
-  类型：字符串，最大 64 字符，建立索引。
-
-observed_at
-  类型：带时区时间，建立索引。
-  说明：传感器采集时间，统一存为 UTC。
-
-received_at
-  类型：带时区时间。
-  说明：服务器接收时间，统一存为 UTC。
-
-temperature
-  类型：浮点数，单位 °C，非空。
-
-humidity
-  类型：浮点数，单位 %，非空。
-
-wind_speed
-  类型：浮点数或 NULL，单位 m/s。可选，缺失时保存为 NULL。
-
-wind_direction
-  类型：浮点数或 NULL，单位度。可选，缺失时保存为 NULL。
-
-co2
-  类型：浮点数或 NULL，单位 ppm。可选，缺失时保存为 NULL。
-
-pm25
-  类型：浮点数或 NULL，单位 μg/m³。可选，缺失时保存为 NULL。
-
-pm10
-  类型：浮点数或 NULL，单位 μg/m³。可选，缺失时保存为 NULL。
-
-组合索引：station_id + observed_at
-说明：用于提高站点历史数据的查询效率。
-
 八、环境变量
 ----------------------------------------
-APP_NAME
-  默认值：Campus Weather Monitor API
-  说明：OpenAPI 页面显示的服务名称。
-
 DATABASE_URL
-  默认值：sqlite:///./data/weather.db
-  说明：数据库连接地址。
-  SQLite 示例：sqlite:///./data/weather.db
-  PostgreSQL 示例：
-  postgresql+psycopg://weather:weather@127.0.0.1:5432/weather
+  必填。仅支持 PostgreSQL：
+  postgresql://weather:weather@127.0.0.1:5433/weather
+  兼容 postgres:// 前缀；拒绝 sqlite:// 和 postgresql+psycopg://。
+
+TEST_DATABASE_URL
+  测试用。库名必须以 _test 结尾，否则测试拒绝运行。
+  默认：postgresql://weather:weather@127.0.0.1:5433/weather_test
 
 CORS_ORIGINS
-  默认值：http://localhost:5173,http://127.0.0.1:5173
-  说明：允许跨域访问的前端地址，多个地址使用英文逗号分隔。
-  设置为 * 表示允许全部来源，仅建议用于受控开发环境。
+  默认：http://localhost:5173,http://127.0.0.1:5173
+  多个地址用英文逗号分隔；设为 * 时不启用 credentials。
+
+APP_NAME
+  默认：Campus Weather Monitor API
 
 PORT
-  默认值：8000
-  说明：容器对外服务端口。
+  默认：8000
 
-WEB_CONCURRENCY
-  默认值：1
-  说明：Uvicorn 工作进程数。多实例或多进程部署建议使用 PostgreSQL。
+DB_PORT
+  Compose 数据库映射到宿主机的端口，默认 5433。
 
-九、部署参数
+WEB_PORT
+  Compose Web 映射到宿主机的端口，默认 8080。
+
+九、本地运行
 ----------------------------------------
-本地开发：
+前置：Go 1.27+、Node 22+、pnpm 11+、PostgreSQL 17+。
+本机当前没有 Go 时：brew install go
 
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+  cp .env.example .env
+  docker compose -f docker-compose.example.yml up -d db
 
-容器单独运行：
+  set -a
+  . ./.env
+  set +a
 
-docker build -t campus-weather-api .
-docker run --rm -p 8000:8000 -v weather-data:/app/data campus-weather-api
+  pnpm install
+  make api
+  pnpm dev
 
-API 与 PostgreSQL 联合运行：
+API 启动时自动执行 goose 迁移。手动命令：
 
-复制模板（docker-compose.yml 已被 .gitignore 忽略，可保存本机密码和端口）：
-cp docker-compose.example.yml docker-compose.yml
-docker compose -f docker-compose.yml up --build -d
+  make migrate
+  make migrate-status
 
-Compose 配置默认值：
-API 容器端口：8000
-数据库服务：db
-数据库端口：5432
-数据库名：weather
-数据库用户：weather
-数据库密码：weather
-持久化卷：weather-data
-
-生产环境必须使用独立强密码，限制 CORS_ORIGINS，并通过 HTTPS 反向代理访问。
-
-十、设备接入
+十、迁移
 ----------------------------------------
-设备通过 HTTP 直接上报，无需 Mac 端中继脚本。
+- 启动时在 PostgreSQL advisory lock 内执行 goose up，多实例不会并发改表。
+- 旧版 Python 服务用 create_all 建过表时，先执行：
+    make migrate-stamp
+  即 goose stamp 1，只写版本号，不重建表。
+- 新增迁移：在
+    apps/api/internal/platform/migrate/sql/
+  下添加带 -- +goose Up / -- +goose Down 的 SQL 文件。
+- 不要修改已经应用的迁移。
+- goose down 会删表和数据，只允许用于测试库。
 
-请求：
-POST http://<server>:8000/api/v1/measurements
-Content-Type: application/json
+十一、数据保留与备份
+----------------------------------------
+数据永久保留：
+- 没有 TTL、定时清理、归档或降采样任务。
+- 没有 DELETE 接口。
+- measurements 表只增不减。
 
-{
-  "station_id": "station-01",
-  "observed_at": "2026-11-04T08:30:00Z",
-  "temperature": 21.6,
-  "humidity": 63.0
-}
+备份（Compose）：
+  docker compose exec -T db pg_dump -U weather -Fc weather > weather.dump
+  cat weather.dump | docker compose exec -T db pg_restore -U weather -d weather --clean --if-exists
+
+docker compose down 保留 weather-data 命名卷。
+docker compose down -v 会删除全部数据，禁止在真实部署中使用。
+
+十二、容器部署
+----------------------------------------
+  cp docker-compose.example.yml docker-compose.yml
+  docker compose -f docker-compose.yml up --build -d
+
+端口：
+  API：8000（设备上报地址保持不变）
+  Web：8080（nginx 代理 /api、/health、/openapi.json、/docs）
+  PostgreSQL：Docker 命名卷 weather-data 持久化数据，仅绑定宿主机 127.0.0.1:5433
+  测试库初始化脚本固化在 docker/db/Dockerfile 构建的镜像中
+
+API 镜像为多阶段构建的 distroless nonroot，迁移 SQL 内嵌在二进制中。
+
+生产环境必须替换示例密码、限制 CORS_ORIGINS，并通过 HTTPS 反向代理暴露服务。
+
+十三、测试与 CI
+----------------------------------------
+Go：
+  cd apps/api
+  TEST_DATABASE_URL=postgresql://.../weather_test go test -p 1 ./...
+
+前端 / 全仓库：
+  pnpm typecheck
+  pnpm lint
+  pnpm test
+  pnpm e2e
+
+GitHub Actions job：
+  api        gofmt、go vet、go test -p 1、go build
+  web        Biome、typecheck、Vitest、Vite build
+  contracts  重新生成 OpenAPI 与 TS 类型并检查漂移
+  e2e        PostgreSQL service + 真实 API + Playwright
+  docker     构建 API/Web 镜像
+
+本地 act：
+  act push
+  act push -j api
+  act push -j web
+  act push -j contracts
+
+CI 使用 PostgreSQL service 的发布端口 55432；docker job 在 act 下跳过构建步骤。
+
+十四、设备接入
+----------------------------------------
+上报：
+  POST http://<server>:8000/api/v1/measurements
+  Content-Type: application/json
+
+  {
+    "station_id": "station-01",
+    "observed_at": "2026-11-04T08:30:00Z",
+    "temperature": 21.6,
+    "humidity": 63.0
+  }
 
 说明：
 - station_id 由固件配置，默认 station-01。
@@ -402,24 +288,8 @@ Content-Type: application/json
 - 服务必须监听 0.0.0.0 才能被局域网设备访问。
 - 接口没有鉴权，只应部署在受控局域网或带鉴权的反向代理之后。
 
-十一、E2E 回归
+十五、已移除的旧栈
 ----------------------------------------
-启动服务后执行真实 HTTP 回归：
-
-python tests/e2e_regression.py --base-url http://127.0.0.1:8000
-
-覆盖健康检查、完整/部分上报、校验失败、历史查询、筛选、分页、最新值、
-CORS、OpenAPI 和路由状态码。重启服务后可执行：
-
-python tests/e2e_regression.py --base-url http://127.0.0.1:8000 --check-station e2e-persist
-
-验证 SQLite 或 PostgreSQL 中的持久化记录仍在。
-
-旧数据库升级：
-- SQLite：停止服务后删除 data/weather.db 重建；如需保留数据，重建表并复制。
-- PostgreSQL：
-  ALTER TABLE measurements ALTER COLUMN wind_speed DROP NOT NULL;
-  ALTER TABLE measurements ALTER COLUMN wind_direction DROP NOT NULL;
-  ALTER TABLE measurements ALTER COLUMN co2 DROP NOT NULL;
-  ALTER TABLE measurements ALTER COLUMN pm25 DROP NOT NULL;
-  ALTER TABLE measurements ALTER COLUMN pm10 DROP NOT NULL;
+- SQLite、Python、FastAPI、SQLAlchemy、Alembic 已全部移除。
+- 旧 SQLite 数据按用户确认不迁移、不导入。
+- 旧 PostgreSQL 库可保留数据，通过 goose stamp 接管版本。
