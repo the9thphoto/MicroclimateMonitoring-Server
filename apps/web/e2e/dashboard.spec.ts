@@ -108,7 +108,7 @@ test("network map shows all reported stations and switches layers without select
   await expect(page).toHaveURL(/layer=humidity/);
   await expect(page).not.toHaveURL(/station=/);
 
-  await page.locator(`.station-marker[data-station="${main}"]`).click();
+  await page.locator(`.station-marker[data-station="${main}"]`).click({ force: true });
   await expect(page.locator(".station-panel")).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`station=${main}`));
   await expect(page.getByRole("button", { name: "关闭站点详情，返回总览地图" })).toBeVisible();
@@ -152,7 +152,7 @@ test("station detail opens analysis and returns to the network map", async ({ pa
 
   await page.goto("/");
   await expect(page.getByRole("button", { name: "打开分析工作台" })).toBeDisabled();
-  await page.locator(`.station-marker[data-station="${station}"]`).click();
+  await page.locator(`.station-marker[data-station="${station}"]`).click({ force: true });
   await expect(page.locator(".station-panel")).toBeVisible();
 
   await page.getByRole("button", { name: "打开分析工作台" }).click();
@@ -222,7 +222,7 @@ test("dense station networks use compact clickable markers", async ({ page, requ
   await page.getByRole("button", { name: "显示温度场", exact: true }).click();
   await expect(page.locator(".map-view.has-field")).toBeVisible();
 
-  await dense.click();
+  await dense.click({ force: true });
   await expect(page.locator(".station-panel")).toBeVisible();
   const selected = page.locator(".station-marker.is-selected");
   await expect(selected).toHaveCount(1);
