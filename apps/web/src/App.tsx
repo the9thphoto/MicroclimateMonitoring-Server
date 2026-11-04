@@ -137,7 +137,7 @@ export function App() {
   }, [overlayIds, displayStations, hasPanel, state.layer]);
   const activeField = fields.find((item) => item.id === state.layer);
   const fieldSource = activeField
-    ? `IDW ${activeField.layer.label}场 · ${activeField.field.stationCount} 站 · 远场均值 ${activeField.field.mean.toFixed(1)}${activeField.layer.unit} · 虚线内有效`
+    ? `IDW ${activeField.layer.label}场 · ${activeField.field.stationCount} 站 · 远场均值 ${activeField.field.mean.toFixed(1)}${activeField.layer.unit} · 虚线内有效${activeField.id === "temperature" ? " · 等温线" : ""}`
     : undefined;
   const displayDomain = activeLayer.domain;
   const toggleOverlay = useCallback((id: LayerId) => {

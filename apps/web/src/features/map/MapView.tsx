@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { colorForValue, hexToRgb } from "../../lib/colors";
 import type { ScalarField } from "../../lib/field";
+import { buildIsotherms } from "../../lib/isotherms";
 import type { LayerDefinition, LayerId } from "../../lib/layers";
 import { formatLayerValue, layerColor } from "../../lib/layers";
 import { CAMPUS_LOCATION, type StationLocation } from "../../lib/location";
@@ -369,6 +370,27 @@ export function MapView({
         },
         firstSymbol,
       );
+    }
+
+    const temperatureField = fields.find((item) => item.id === "temperature");
+    if (temperatureField) {
+      const contours = buildIsotherms(temperatureField.field);
+      if (contours.features.length > 0) {
+        map.addSource("field-isolines", { type: "geojson", data: contours });
+        map.addLayer(
+          {
+            id: "field-isolines",
+            type: "line",
+            source: "field-isolines",
+            paint: {
+              "line-color": "#f1f7f5",
+              "line-width": 0.9,
+              "line-opacity": 0.62,
+            },
+          },
+          firstSymbol,
+        );
+      }
     }
 
     const boundary = fields[0]?.field.hull.map((point) => [point.longitude, point.latitude]) ?? [];
