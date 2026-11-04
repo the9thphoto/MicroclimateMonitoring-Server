@@ -181,3 +181,24 @@ test("forecast layers stay disabled until a model provider is connected", async 
   await expect(page.getByRole("button", { name: "云" })).toBeDisabled();
   await expect(page.getByRole("button", { name: "气压" })).toBeDisabled();
 });
+
+test("dense station networks use compact clickable markers", async ({ page, request }) => {
+  await mockMap(page);
+  const suffix = Date.now();
+  for (let index = 0; index < 20; index += 1) {
+    const latitude = 32.01 + (index % 5) * 0.02;
+    const longitude = 118.56 + Math.floor(index / 5) * 0.02;
+    await seedStation(request, `e2e-dense-${suffix}-${index}`, 1, latitude, longitude);
+  }
+
+  await page.goto("/");
+  await expect(page.locator(".station-marker").first()).toBeVisible();
+  const dense = page.locator(".station-marker.is-dense").first();
+  await expect(dense).toBeVisible();
+
+  await dense.click();
+  await expect(page.locator(".station-panel")).toBeVisible();
+  const selected = page.locator(".station-marker.is-selected");
+  await expect(selected).toHaveCount(1);
+  expect(await selected.evaluate((element) => element.classList.contains("is-dense"))).toBe(false);
+});

@@ -33,10 +33,9 @@ function updateMarker(handle: MarkerHandle, data: MapStationMarker, activeLayer:
   element.style.setProperty("--marker-color", color);
   element.classList.toggle("is-selected", data.selected);
   element.dataset.station = data.stationId;
-  element.setAttribute(
-    "aria-label",
-    `站点 ${data.stationId}，${activeLayer.label} ${formatLayerValue(activeLayer, data.value)}，点击查看详情`,
-  );
+  const summary = `${activeLayer.label} ${formatLayerValue(activeLayer, data.value)}`;
+  element.setAttribute("aria-label", `站点 ${data.stationId}，${summary}，点击查看详情`);
+  element.title = `${data.stationId}：${summary}`;
 
   const name = element.querySelector<HTMLElement>(".station-marker__name");
   const value = element.querySelector<HTMLElement>(".station-marker__value");
@@ -193,6 +192,7 @@ export function MapView({ markers, activeLayer, focus, mode, onSelectStation }: 
     }
     const seen = new Set<string>();
     const showNames = markers.length <= 8;
+    const dense = markers.length > 8;
     for (const data of markers) {
       const { latitude, longitude } = data.location;
       if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
@@ -210,6 +210,7 @@ export function MapView({ markers, activeLayer, focus, mode, onSelectStation }: 
       }
       updateMarker(handle, data, activeLayer);
       handle.element.classList.toggle("show-name", showNames);
+      handle.element.classList.toggle("is-dense", dense && !data.selected);
       handle.marker.setLngLat([longitude, latitude]);
       handle.element.style.zIndex = data.selected ? "2" : "1";
     }

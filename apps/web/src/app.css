@@ -2331,3 +2331,26 @@ button:disabled {
 .station-marker.show-name .station-marker__name {
   display: inline;
 }
+
+.station-marker.is-dense .station-marker__pill {
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border-radius: 50%;
+  border-color: var(--marker-color, var(--accent));
+  background: var(--marker-color, var(--accent));
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--marker-color, var(--accent)) 22%, transparent),
+    0 6px 16px rgba(0, 0, 0, 0.35);
+}
+
+.station-marker.is-dense .station-marker__name,
+.station-marker.is-dense .station-marker__value,
+.station-marker.is-dense .station-marker__wind {
+  display: none;
+}
+
+.station-marker.is-dense .station-marker__pulse {
+  width: 28px;
+  height: 28px;
+}
