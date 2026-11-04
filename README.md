@@ -185,3 +185,19 @@ ESP32 固件仓库保持不变：
 - 温度/湿度为实测值，其余传感器字段省略或传 `null`
 
 接口没有鉴权，只应部署在受控局域网，或放在带鉴权和 HTTPS 的反向代理之后。
+
+## 标签发布与 CD Agent
+
+生产部署在 `10.126.126.78`，由独立仓库 `microclimate-cd-agent`（本地 `../cd`）负责：
+
+- `build-X.Y.Z`：GitHub-hosted CI，执行测试和 Dockerfile 构建验证。
+- `deploy-X.Y.Z`：目标机 CD agent 检出该 tag，构建并启动 `deploy/compose.yaml`。
+- 同一个 commit 可以同时打两个 tag；先推 `build-*`，等 CI 成功后再推 `deploy-*`。
+
+CD agent 只轮询 `deploy-*` 标签，校验对应 `build.yml` 成功后才部署；失败自动回滚到上一版本。目标机端口：
+
+- API：`0.0.0.0:8000`（设备上报）
+- Web：`0.0.0.0:8080`
+- PostgreSQL：仅内部网络，命名卷 `microclimate_weather-data`
+
+现有 nginx 80/443 不改动。安装与状态说明见 CD agent 仓库的 `README.md`；生产 Compose 见 [deploy/compose.yaml](deploy/compose.yaml)。
