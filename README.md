@@ -1,6 +1,6 @@
 # 校园微气候监测后端
 
-基于 Go 与 TypeScript 的 monorepo：Go API 接收并保存监测站数据，React 仪表盘展示最新值与历史趋势。设备固件仍通过 HTTP 直接上报。
+基于 Go 与 TypeScript 的 monorepo：Go API 接收并保存监测站数据，React 气象分析面板展示当前观测、趋势、温湿日历、分时分布、相关矩阵、风玫瑰与站点地图。设备固件仍通过 HTTP 直接上报。
 
 ```text
 ESP32-C3 (C/ESP-IDF, 独立仓库)
@@ -60,6 +60,8 @@ pnpm install
 make api        # 终端 1：http://127.0.0.1:8000
 pnpm dev        # 终端 2：http://127.0.0.1:5173
 ```
+
+气象分析面板不向后端写坐标。需要默认站点位置时，在 `apps/web/.env` 设置 `VITE_STATION_LAT` / `VITE_STATION_LON`；也可用 `?lat=&lon=` 或页面内表单覆盖。优先级为 URL、浏览器本地设置、构建变量。地图底图来自 OpenStreetMap，需要联网。
 
 API 启动时会在 advisory lock 内自动执行 goose 迁移，空库会直接建表。也可以手动执行：
 
