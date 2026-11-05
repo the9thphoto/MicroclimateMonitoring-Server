@@ -1,7 +1,8 @@
 import type { AnalysisPoint, DataQuality } from "../../lib/analysis";
 import type { LayerDefinition, LayerId } from "../../lib/layers";
+import { LAYERS } from "../../lib/layers";
 import type { StationLocation } from "../../lib/location";
-import { LayerRail } from "../layers/LayerRail";
+import { LayerSelect } from "../layers/LayerSelect";
 import { ChevronLeftIcon } from "../shell/icons";
 import { StationActions } from "./StationActions";
 import { StationContent } from "./StationContent";
@@ -15,7 +16,6 @@ interface StationViewProps {
   location: StationLocation | null;
   availability: Record<LayerId, boolean>;
   onSelectLayer: (id: LayerId) => void;
-  onForecast: (id: string) => void;
   onBack: () => void;
   onOpenAnalysis: () => void;
   onOpenData: () => void;
@@ -30,7 +30,6 @@ export function StationView({
   location,
   availability,
   onSelectLayer,
-  onForecast,
   onBack,
   onOpenAnalysis,
   onOpenData,
@@ -46,16 +45,12 @@ export function StationView({
           <p className="eyebrow">STATION</p>
           <h2>{station}</h2>
         </div>
+        <LayerSelect
+          layers={LAYERS.filter((item) => availability[item.id])}
+          value={layer.id}
+          onChange={onSelectLayer}
+        />
       </header>
-
-      <LayerRail
-        active={layer.id}
-        availability={availability}
-        onSelect={onSelectLayer}
-        onForecast={onForecast}
-        variant="horizontal"
-        showForecast={false}
-      />
 
       <StationContent
         station={station}

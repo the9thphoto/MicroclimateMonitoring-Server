@@ -4,19 +4,9 @@ import type { AnalysisPoint } from "../../lib/analysis";
 import type { LayerDefinition, LayerId } from "../../lib/layers";
 import { formatLayerValue, layerColor } from "../../lib/layers";
 import { RANGE_OPTIONS, type RangeKey } from "../../lib/ranges";
+import { LayerSelect } from "../layers/LayerSelect";
 import { MapLegend } from "../layers/MapLegend";
 import { PauseIcon, PlayIcon } from "../shell/icons";
-
-export interface OverlayOption {
-  id: LayerId;
-  label: string;
-  shortLabel: string;
-  available: boolean;
-  active: boolean;
-  stops: string[];
-  domain: [number, number];
-  unit: string;
-}
 
 interface TimelineDockProps {
   points: AnalysisPoint[];
@@ -34,8 +24,8 @@ interface TimelineDockProps {
   onToLatest: () => void;
   domain?: [number, number];
   source?: string;
-  overlays?: OverlayOption[];
-  onToggleOverlay?: (id: LayerId) => void;
+  primaryLayers?: LayerDefinition[];
+  onPrimaryChange?: (id: LayerId) => void;
   compact?: boolean;
 }
 
@@ -55,8 +45,8 @@ export function TimelineDock({
   onToLatest,
   domain,
   source,
-  overlays,
-  onToggleOverlay,
+  primaryLayers,
+  onPrimaryChange,
   compact = false,
 }: TimelineDockProps) {
   const selectedValue = selected ? layer.valueOf(selected) : null;
@@ -71,32 +61,6 @@ export function TimelineDock({
 
   return (
     <section className="timeline-dock" aria-label="时间轴与回放">
-      {overlays && overlays.length > 0 ? (
-        <div className="timeline-dock__overlays" role="toolbar" aria-label="可视化叠加">
-          {overlays.map((overlay) => (
-            <button
-              key={overlay.id}
-              type="button"
-              className={overlay.active ? "overlay-chip is-active" : "overlay-chip"}
-              aria-pressed={overlay.active}
-              disabled={!overlay.available}
-              title={overlay.available ? overlay.label : `${overlay.label}：全网暂无数据`}
-              onClick={() => onToggleOverlay?.(overlay.id)}
-            >
-              <span
-                className="overlay-chip__swatch"
-                style={{ background: `linear-gradient(90deg, ${overlay.stops.join(", ")})` }}
-                aria-hidden="true"
-              />
-              <span>{overlay.shortLabel}</span>
-              <span className="overlay-chip__range">
-                {overlay.domain[0]}–{overlay.domain[1]}
-                {overlay.unit}
-              </span>
-            </button>
-          ))}
-        </div>
-      ) : null}
       <div className="timeline-dock__head">
         <div className="timeline-dock__range" role="toolbar" aria-label="时间范围">
           {RANGE_OPTIONS.map((option) => (
@@ -113,6 +77,9 @@ export function TimelineDock({
         </div>
 
         <div className="timeline-dock__meta">
+          {primaryLayers && primaryLayers.length > 1 && onPrimaryChange ? (
+            <LayerSelect layers={primaryLayers} value={layer.id} onChange={onPrimaryChange} />
+          ) : null}
           <span className="source-badge">观测</span>
           <span>{points.length} 帧</span>
           <span className="timeline-dock__time" aria-live="polite">

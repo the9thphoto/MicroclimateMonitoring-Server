@@ -173,14 +173,31 @@ export function beaufort(speed: number | null): Beaufort | null {
   return { level, label: BEAUFORT_LABELS[level] ?? "未知" };
 }
 
-const WIND_DIRECTIONS = ["北", "东北", "东", "东南", "南", "西南", "西", "西北"];
+const WIND_DIRECTIONS = [
+  "北",
+  "北东北",
+  "东北",
+  "东东北",
+  "东",
+  "东东南",
+  "东南",
+  "南东南",
+  "南",
+  "南西南",
+  "西南",
+  "西西南",
+  "西",
+  "西西北",
+  "西北",
+  "北西北",
+];
 
 export function windDirectionLabel(degrees: number | null): string | null {
   if (!isFiniteNumber(degrees)) {
     return null;
   }
   const normalized = ((degrees % 360) + 360) % 360;
-  return WIND_DIRECTIONS[Math.round(normalized / 45) % WIND_DIRECTIONS.length] ?? null;
+  return WIND_DIRECTIONS[Math.round(normalized / 22.5) % WIND_DIRECTIONS.length] ?? null;
 }
 
 interface Breakpoint {

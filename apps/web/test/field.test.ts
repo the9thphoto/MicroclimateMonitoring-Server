@@ -68,6 +68,24 @@ describe("temperature field", () => {
     expect(pointInHull(32.2, 118.63, hull)).toBe(false);
   });
 
+  it("expands the valid hull when stations move outward", () => {
+    const inner = buildTemperatureField([
+      station("a", 32.05, 118.6, 20),
+      station("b", 32.1, 118.6, 24),
+      station("c", 32.05, 118.7, 22),
+    ]);
+    const outer = buildTemperatureField([
+      station("a", 32.05, 118.6, 20),
+      station("b", 32.1, 118.6, 24),
+      station("c", 32.05, 118.7, 22),
+      station("d", 32.15, 118.8, 26),
+    ]);
+    expect(inner).not.toBeNull();
+    expect(outer).not.toBeNull();
+    expect(outer?.bounds.north).toBeGreaterThan(inner?.bounds.north ?? 0);
+    expect(outer?.bounds.east).toBeGreaterThan(inner?.bounds.east ?? 0);
+    expect(outer?.hull.length).toBeGreaterThanOrEqual(inner?.hull.length ?? 0);
+  });
   it("requires at least three located stations", () => {
     expect(
       buildTemperatureField([station("a", 32, 118.6, 20), station("b", 32.1, 118.6, 24)]),

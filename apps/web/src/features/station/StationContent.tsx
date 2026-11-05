@@ -2,15 +2,11 @@ import { formatNumber, Sparkline } from "@microclimate/ui";
 import type { CSSProperties } from "react";
 
 import type { AnalysisPoint, DataQuality } from "../../lib/analysis";
-import {
-  absoluteHumidity,
-  airQualityFromAqi,
-  comfortFromThi,
-  windDirectionLabel,
-} from "../../lib/analysis";
+import { absoluteHumidity, airQualityFromAqi, comfortFromThi } from "../../lib/analysis";
 import type { LayerDefinition } from "../../lib/layers";
 import { formatLayerValue, layerColor } from "../../lib/layers";
 import { formatCoordinates, type StationLocation } from "../../lib/location";
+import { formatWindDirection, formatWindSpeed, windBarbSvg } from "../../lib/wind";
 
 interface StationContentProps {
   station: string;
@@ -44,7 +40,15 @@ export function StationContent({
   const delta = value !== null && previousValue !== null ? value - previousValue : null;
   const comfort = comfortFromThi(point?.thi ?? null);
   const air = point?.aqi !== null && point?.aqi !== undefined ? airQualityFromAqi(point.aqi) : null;
-  const windDirection = windDirectionLabel(point?.windDirection ?? null);
+  const windDirection = formatWindDirection(point?.windDirection ?? null);
+  const windSpeed = formatWindSpeed(point?.windSpeed ?? null);
+  const windBarb =
+    point?.windDirection !== null &&
+    point?.windDirection !== undefined &&
+    point?.windSpeed !== null &&
+    point?.windSpeed !== undefined
+      ? windBarbSvg(point.windDirection, point.windSpeed, 28)
+      : null;
   const absolute = point ? absoluteHumidity(point.temperature ?? 0, point.humidity ?? 0) : null;
   const coverage = Math.round(quality.coverage * 100);
 
@@ -94,11 +98,21 @@ export function StationContent({
           </div>
           <div>
             <dt>风速</dt>
-            <dd>{metricValue(point?.windSpeed ?? null, 1, "m/s")}</dd>
+            <dd>{windSpeed ?? "未接入"}</dd>
           </div>
           <div>
             <dt>风向</dt>
-            <dd>{windDirection ?? "未接入"}</dd>
+            <dd>
+              {windBarb ? (
+                <img
+                  className="station-wind-barb"
+                  src={`data:image/svg+xml,${encodeURIComponent(windBarb)}`}
+                  alt=""
+                  aria-hidden="true"
+                />
+              ) : null}
+              {windDirection ?? "未接入"}
+            </dd>
           </div>
           <div>
             <dt>空气质量</dt>

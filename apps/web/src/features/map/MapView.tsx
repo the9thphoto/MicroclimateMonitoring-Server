@@ -2,20 +2,23 @@ import * as maplibregl from "maplibre-gl";
 import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
 import { useEffect, useRef, useState } from "react";
 
-import { colorForValue, hexToRgb } from "../../lib/colors";
+import { hexToRgb } from "../../lib/colors";
 import type { ScalarField } from "../../lib/field";
 import { buildIsotherms } from "../../lib/isotherms";
 import type { LayerDefinition, LayerId } from "../../lib/layers";
 import { formatLayerValue, layerColor } from "../../lib/layers";
 import { CAMPUS_LOCATION, type StationLocation } from "../../lib/location";
+import { formatWindDirection, formatWindSpeed, windBarbSvg } from "../../lib/wind";
 import { FitIcon, LocateIcon, MapPinIcon } from "../shell/icons";
 import { MapFallback, type MapStationMarker } from "./MapFallback";
 import { createFallbackStyle, MAP_STYLE_URL } from "./mapStyle";
+import { WindBarbKey } from "./WindBarbKey";
 
 export interface MapField {
   id: LayerId;
   layer: LayerDefinition;
   field: ScalarField;
+  domain: [number, number];
   opacity: number;
 }
 
@@ -63,15 +66,6 @@ function updateMarker(
   if (value) {
     value.textContent = formatLayerValue(activeLayer, data.value);
   }
-
-  const wind = element.querySelector<HTMLElement>(".station-marker__wind");
-  const showWind = activeLayer.id === "windSpeed" && data.direction !== null;
-  if (wind) {
-    wind.hidden = !showWind;
-    if (showWind) {
-      wind.style.transform = `rotate(${(data.direction ?? 0) + 180}deg)`;
-    }
-  }
 }
 
 function createMarkerElement(stationId: string, onSelect: (id: string) => void): HTMLButtonElement {
@@ -84,7 +78,6 @@ function createMarkerElement(stationId: string, onSelect: (id: string) => void):
     <span class="station-marker__pill">
       <span class="station-marker__name"></span>
       <span class="station-marker__value"></span>
-      <span class="station-marker__wind" aria-hidden="true">↑</span>
     </span>
   `;
   element.addEventListener("click", (event) => {
@@ -258,20 +251,17 @@ export function MapView({
     }
     const visible = new Set<string>();
     for (const data of markers) {
-      if (!windVisible || data.direction === null) {
+      if (!windVisible || data.direction === null || data.windSpeed === null) {
         continue;
       }
       let marker = windHandles.current.get(data.stationId);
       if (!marker) {
         const element = document.createElement("div");
-        element.className = "wind-arrow";
-        const arrow = document.createElement("span");
-        arrow.textContent = "↑";
-        element.append(arrow);
+        element.className = "wind-barb";
         marker = new maplibregl.Marker({
           element,
           anchor: "center",
-          offset: [0, -24],
+          offset: [0, -28],
         })
           .setLngLat([data.location.longitude, data.location.latitude])
           .addTo(map);
@@ -279,11 +269,11 @@ export function MapView({
       }
       marker.setLngLat([data.location.longitude, data.location.latitude]);
       const element = marker.getElement();
-      const arrow = element.querySelector("span");
-      if (arrow) {
-        arrow.style.transform = `rotate(${(data.direction ?? 0) + 180}deg)`;
-      }
-      element.title = `${data.stationId}：风速 ${data.windSpeed ?? "—"} m/s，风向 ${data.direction ?? "—"}°`;
+      element.innerHTML = windBarbSvg(data.direction, data.windSpeed);
+      const directionText = formatWindDirection(data.direction) ?? "—";
+      const speedText = formatWindSpeed(data.windSpeed) ?? "—";
+      element.title = `${data.stationId}：${directionText}，${speedText}`;
+      element.setAttribute("aria-label", `${data.stationId} 风羽：${directionText}，${speedText}`);
       visible.add(data.stationId);
     }
     for (const [stationId, marker] of windHandles.current) {
@@ -336,7 +326,7 @@ export function MapView({
         if (value === undefined || !Number.isFinite(value)) {
           continue;
         }
-        const [red, green, blue] = hexToRgb(colorForValue(value, layer.domain, layer.stops));
+        const [red, green, blue] = hexToRgb(layerColor(layer, value, item.domain));
         const offset = index * 4;
         image.data[offset] = red;
         image.data[offset + 1] = green;
@@ -457,6 +447,7 @@ export function MapView({
       ]
         .filter(Boolean)
         .join(" ")}
+      data-field-layers={fields.map((field) => field.id).join(",")}
     >
       <div ref={containerRef} className="map-view__canvas" />
       {failed ? (
@@ -484,6 +475,8 @@ export function MapView({
           底图离线 · 站点标记仍可用
         </div>
       ) : null}
+
+      {windVisible ? <WindBarbKey /> : null}
 
       <div className="map-controls">
         <button type="button" onClick={fitAll} aria-label="适配全部站点" title="适配全部站点">

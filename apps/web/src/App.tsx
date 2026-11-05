@@ -23,6 +23,7 @@ import { useNetworkFrames } from "./hooks/useNetworkFrames";
 import { useStationDirectory } from "./hooks/useStationDirectory";
 import { useTimeline } from "./hooks/useTimeline";
 import { dataQuality, toAnalysisPoints } from "./lib/analysis";
+import { computeFieldDomain } from "./lib/domain";
 import { buildScalarField } from "./lib/field";
 import { LAYERS, type LayerId, layerById } from "./lib/layers";
 import {
@@ -48,7 +49,6 @@ export function App() {
   const [state, setState] = useState<AppUrlState>(() => appStateFromSearch(window.location.search));
   const [pickerOpen, setPickerOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
-  const [overlayIds, setOverlayIds] = useState<LayerId[]>(["temperature"]);
   const isMobile = useMediaQuery("(max-width: 700px)");
 
   const latest = useLatest(state.station);
@@ -99,27 +99,12 @@ export function App() {
   const quality = useMemo(() => dataQuality(rows, rangeMs), [rows, rangeMs]);
   const availability = useMemo(() => networkAvailability(visibleStations), [visibleStations]);
   const unlocated = useMemo(() => unlocatedCount(networkStations), [networkStations]);
-  const pointsForAvailability = displayStations.map((station) => station.point);
-  const overlayOptions = useMemo(
-    () =>
-      LAYERS.map((layer) => ({
-        id: layer.id,
-        label: layer.label,
-        shortLabel: layer.shortLabel,
-        stops: layer.stops,
-        domain: layer.domain,
-        unit: layer.unit,
-        available: layer.available(pointsForAvailability),
-        active: overlayIds.includes(layer.id),
-      })),
-    [pointsForAvailability, overlayIds],
-  );
   const fields = useMemo<MapField[]>(() => {
     if (hasPanel) {
       return [];
     }
     const result: MapField[] = [];
-    for (const id of overlayIds) {
+    for (const id of state.overlays) {
       const layer = layerById(id);
       const field = buildScalarField(displayStations, id, layer.valueOf);
       if (field) {
@@ -127,6 +112,10 @@ export function App() {
           id,
           layer,
           field,
+          domain: computeFieldDomain(
+            displayStations.map((station) => layer.valueOf(station.point)),
+            layer,
+          ),
           opacity: id === state.layer ? 0.55 : 0.28,
         });
       }
@@ -134,17 +123,16 @@ export function App() {
     return result.sort((left, right) =>
       left.id === state.layer ? 1 : right.id === state.layer ? -1 : 0,
     );
-  }, [overlayIds, displayStations, hasPanel, state.layer]);
+  }, [state.overlays, displayStations, hasPanel, state.layer]);
   const activeField = fields.find((item) => item.id === state.layer);
   const fieldSource = activeField
-    ? `IDW ${activeField.layer.label}场 · ${activeField.field.stationCount} 站 · 远场均值 ${activeField.field.mean.toFixed(1)}${activeField.layer.unit} · 虚线内有效${activeField.id === "temperature" ? " · 等温线" : ""}`
+    ? `IDW ${activeField.layer.label}场 · ${activeField.field.stationCount} 站 · 远场均值 ${activeField.field.mean.toFixed(1)}${activeField.layer.unit} · 色域 ${activeField.domain[0]}–${activeField.domain[1]}${activeField.layer.unit} · 有效范围 ${activeField.field.stationCount} 站凸包${activeField.id === "temperature" ? " · 等温线" : ""}`
     : undefined;
-  const displayDomain = activeLayer.domain;
-  const toggleOverlay = useCallback((id: LayerId) => {
-    setOverlayIds((previous) =>
-      previous.includes(id) ? previous.filter((item) => item !== id) : [...previous, id],
-    );
-  }, []);
+  const displayDomain = activeField?.domain ?? activeLayer.domain;
+  const primaryLayers = useMemo(
+    () => LAYERS.filter((layer) => state.overlays.includes(layer.id) && availability[layer.id]),
+    [state.overlays, availability],
+  );
 
   const updateState = useCallback((patch: Partial<AppUrlState>) => {
     setState((previous) => {
@@ -161,6 +149,21 @@ export function App() {
     );
   }, []);
 
+  const toggleOverlay = useCallback(
+    (id: LayerId) => {
+      if (state.overlays.includes(id) && state.overlays.length === 1) {
+        setToast("至少保留一个叠加层");
+        return;
+      }
+      const overlays = state.overlays.includes(id)
+        ? state.overlays.filter((item) => item !== id)
+        : [...state.overlays, id];
+      const layer = overlays.includes(state.layer) ? state.layer : (overlays[0] ?? state.layer);
+      updateState({ overlays, layer });
+    },
+    [state.overlays, state.layer, updateState],
+  );
+
   const selectStation = useCallback(
     (stationId: string) => {
       updateState({ station: stationId, view: "station" });
@@ -176,9 +179,10 @@ export function App() {
 
   const selectLayer = useCallback(
     (layer: LayerId) => {
-      updateState({ layer });
+      const overlays = state.overlays.includes(layer) ? state.overlays : [...state.overlays, layer];
+      updateState({ layer, overlays });
     },
-    [updateState],
+    [state.overlays, updateState],
   );
 
   const openAnalysis = useCallback(() => {
@@ -241,9 +245,12 @@ export function App() {
     }
     const fallback = LAYERS.find((layer) => availability[layer.id])?.id;
     if (fallback) {
-      updateState({ layer: fallback });
+      const overlays = state.overlays.includes(fallback)
+        ? state.overlays
+        : [...state.overlays, fallback];
+      updateState({ layer: fallback, overlays });
     }
-  }, [availability, state.layer, updateState]);
+  }, [availability, state.layer, state.overlays, updateState]);
 
   useEffect(() => {
     if (
@@ -362,7 +369,6 @@ export function App() {
           location={selectedStation.location}
           availability={availability}
           onSelectLayer={selectLayer}
-          onForecast={forecastNotice}
           onBack={openMap}
           onOpenAnalysis={openAnalysis}
           onOpenData={openData}
@@ -391,16 +397,15 @@ export function App() {
                 mode={hasPanel ? "station" : "overview"}
                 domain={displayDomain}
                 fields={fields}
-                windVisible={
-                  !hasPanel && (overlayIds.includes("windSpeed") || state.layer === "windSpeed")
-                }
+                windVisible={!hasPanel && state.overlays.includes("windSpeed")}
                 onSelectStation={selectStation}
               />
             </Suspense>
             <LayerRail
-              active={state.layer}
+              enabled={state.overlays}
+              primary={state.layer}
               availability={availability}
-              onSelect={selectLayer}
+              onToggle={toggleOverlay}
               onForecast={forecastNotice}
             />
           </div>
@@ -420,6 +425,8 @@ export function App() {
               onSpeedChange={timeline.setSpeed}
               onToLatest={timeline.toLatest}
               domain={displayDomain}
+              primaryLayers={primaryLayers}
+              onPrimaryChange={selectLayer}
               compact={isMobile}
             />
           ) : (
@@ -439,8 +446,8 @@ export function App() {
               onToLatest={networkTimeline.toLatest}
               domain={displayDomain}
               source={fieldSource}
-              overlays={overlayOptions}
-              onToggleOverlay={toggleOverlay}
+              primaryLayers={primaryLayers}
+              onPrimaryChange={selectLayer}
               compact={isMobile}
             />
           )}

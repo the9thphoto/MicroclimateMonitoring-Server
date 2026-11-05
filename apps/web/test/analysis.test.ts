@@ -85,6 +85,7 @@ describe("meteorological derivations", () => {
     expect(windDirectionLabel(0)).toBe("北");
     expect(windDirectionLabel(90)).toBe("东");
     expect(windDirectionLabel(225)).toBe("西南");
+    expect(windDirectionLabel(22.5)).toBe("北东北");
   });
 
   it("converts particulate concentrations into a reference AQI", () => {

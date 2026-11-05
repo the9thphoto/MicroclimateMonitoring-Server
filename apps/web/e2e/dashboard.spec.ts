@@ -73,6 +73,71 @@ async function seedStation(
   }
 }
 
+async function seedOverlayNetwork(request: APIRequestContext) {
+  const suffix = Date.now();
+  const stations = [
+    {
+      id: `e2e-overlay-a-${suffix}`,
+      lat: 32.1,
+      lon: 118.6,
+      temp: 18,
+      humidity: 30,
+      wind: 2,
+      dir: 0,
+      pm25: 5,
+    },
+    {
+      id: `e2e-overlay-b-${suffix}`,
+      lat: 32.1,
+      lon: 118.7,
+      temp: 24,
+      humidity: 50,
+      wind: 5,
+      dir: 90,
+      pm25: 35,
+    },
+    {
+      id: `e2e-overlay-c-${suffix}`,
+      lat: 32.0,
+      lon: 118.7,
+      temp: 30,
+      humidity: 70,
+      wind: 8,
+      dir: 180,
+      pm25: 75,
+    },
+    {
+      id: `e2e-overlay-d-${suffix}`,
+      lat: 32.0,
+      lon: 118.6,
+      temp: 34,
+      humidity: 90,
+      wind: 12,
+      dir: 270,
+      pm25: 150,
+    },
+  ];
+  for (const station of stations) {
+    const response = await request.post(`${apiBaseURL}/api/v1/measurements`, {
+      data: {
+        station_id: station.id,
+        latitude: station.lat,
+        longitude: station.lon,
+        observed_at: new Date().toISOString(),
+        temperature: station.temp,
+        humidity: station.humidity,
+        wind_speed: station.wind,
+        wind_direction: station.dir,
+        co2: 700,
+        pm25: station.pm25,
+        pm10: station.pm25 * 1.6,
+      },
+    });
+    expect(response.ok()).toBe(true);
+  }
+  return stations.map((station) => station.id);
+}
+
 test("network map shows all reported stations and switches layers without selection", async ({
   page,
   request,
@@ -104,12 +169,14 @@ test("network map shows all reported stations and switches layers without select
 
   const rail = page.locator(".layer-rail");
   const temperature = rail.getByRole("button", { name: "温度", exact: true });
-  const humidity = rail.getByRole("button", { name: "湿度", exact: true });
+  const humidity = rail.getByRole("button", { name: "相对湿度", exact: true });
   await expect(temperature).toBeEnabled();
   await expect(humidity).toBeEnabled();
   await humidity.click();
-  await expect(page).toHaveURL(/layer=humidity/);
+  await expect(page).toHaveURL(/overlays=.*humidity/);
   await expect(page).not.toHaveURL(/station=/);
+  await page.getByLabel("主指标").selectOption("humidity");
+  await expect(page).toHaveURL(/layer=humidity/);
 
   await page.locator(`.station-marker[data-station="${main}"]`).dispatchEvent("click");
   await expect(page.locator(".station-panel")).toBeVisible();
@@ -198,7 +265,7 @@ test("mobile station view is a dedicated page without map overlays", async ({ pa
   await page.goto(`/?station=${station}&view=station`);
   await expect(page.locator(".station-page")).toBeVisible();
   await expect(page.locator(".maplibregl-canvas")).toHaveCount(0);
-  await expect(page.locator(".layer-rail--horizontal")).toBeVisible();
+  await expect(page.getByLabel("主指标")).toBeVisible();
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - window.innerWidth,
   );
@@ -239,20 +306,69 @@ test("dense station networks use compact clickable markers", async ({ page, requ
 
   await expect(page.locator(".map-view.has-field")).toBeVisible();
   await expect(page.getByText(/IDW 温度场/)).toBeVisible();
-  const temperatureOverlay = page.locator(".overlay-chip").filter({ hasText: "温度" });
-  const humidityOverlay = page.locator(".overlay-chip").filter({ hasText: "湿度" });
-  await temperatureOverlay.click();
-  await expect(page.locator(".map-view.has-field")).toHaveCount(0);
+  const rail = page.locator(".layer-rail");
+  const temperatureOverlay = rail.getByRole("button", { name: "温度", exact: true });
+  const humidityOverlay = rail.getByRole("button", { name: "相对湿度", exact: true });
+  await humidityOverlay.click();
+  await expect(page.locator(".layer-button[aria-pressed='true']")).toHaveCount(2);
   await temperatureOverlay.click();
   await expect(page.locator(".map-view.has-field")).toBeVisible();
-  await humidityOverlay.click();
-  await expect(page.locator(".overlay-chip.is-active")).toHaveCount(2);
-  await page.locator(".overlay-chip").filter({ hasText: "风" }).click();
-  await expect(page.locator(".wind-arrow").first()).toBeVisible();
+  await expect(page.locator(".layer-button[aria-pressed='true']")).toHaveCount(1);
+  await rail.getByRole("button", { name: "风速", exact: true }).click();
+  await expect(page.locator(".wind-barb").first()).toBeVisible();
+  await expect(page.locator(".overlay-chip")).toHaveCount(0);
 
   await dense.dispatchEvent("click");
   await expect(page.locator(".station-panel")).toBeVisible();
   const selected = page.locator(".station-marker.is-selected");
   await expect(selected).toHaveCount(1);
   expect(await selected.evaluate((element) => element.classList.contains("is-dense"))).toBe(false);
+});
+
+test("each scalar overlay and wind barb renders from the right rail", async ({ page, request }) => {
+  await mockMap(page);
+  const stations = await seedOverlayNetwork(request);
+  await page.goto("/");
+  await expect(page.locator(".layer-rail")).toBeVisible();
+
+  const rail = page.locator(".layer-rail");
+  const field = page.locator(".map-view");
+  for (const label of ["温度", "相对湿度", "温湿指数", "风速", "空气质量"]) {
+    await rail.getByRole("button", { name: label, exact: true }).click();
+  }
+  for (const label of ["温度", "相对湿度", "温湿指数", "风速", "空气质量"]) {
+    await expect(rail.getByRole("button", { name: label, exact: true })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  }
+  await expect(page.locator(".overlay-chip")).toHaveCount(0);
+  const fieldLayers = (await field.getAttribute("data-field-layers"))?.split(",") ?? [];
+  expect(fieldLayers.sort()).toEqual(["aqi", "humidity", "temperature", "thi", "windSpeed"].sort());
+
+  await page.getByLabel("主指标").selectOption("temperature");
+  await expect(page.locator(".map-legend")).toContainText("温度");
+  await expect(page.locator(".map-legend")).toContainText("色域");
+  await page.screenshot({ path: "test-results/overlay-temperature.png" });
+
+  await page.getByLabel("主指标").selectOption("humidity");
+  await expect(page.locator(".map-legend")).toContainText("相对湿度");
+  await page.screenshot({ path: "test-results/overlay-humidity.png" });
+
+  await page.getByLabel("主指标").selectOption("thi");
+  await expect(page.locator(".map-legend")).toContainText("温湿指数");
+  await expect(page.locator(".map-legend")).toContainText("舒适");
+
+  await page.getByLabel("主指标").selectOption("windSpeed");
+  await expect(page.locator(".map-legend")).toContainText("风速");
+  await expect(page.locator(".wind-barb").count()).resolves.toBeGreaterThanOrEqual(stations.length);
+  await expect(page.locator(".wind-barb-key")).toBeVisible();
+
+  await page.getByLabel("主指标").selectOption("aqi");
+  await expect(page.locator(".map-legend")).toContainText("空气质量");
+  await expect(page.locator(".map-legend")).toContainText("中度污染");
+
+  await rail.getByRole("button", { name: "风速", exact: true }).click();
+  await expect(page.locator(".wind-barb")).toHaveCount(0);
+  await expect(page).toHaveURL(/overlays=/);
 });

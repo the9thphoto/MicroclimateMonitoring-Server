@@ -19,6 +19,7 @@ describe("app URL state", () => {
       view: "station",
       station: "station-02",
       layer: "windSpeed",
+      overlays: ["windSpeed"],
       range: "7d",
       tab: "box",
     });
@@ -29,6 +30,7 @@ describe("app URL state", () => {
     expect(state.view).toBe(DEFAULT_VIEW);
     expect(state.station).toBeNull();
     expect(state.layer).toBe(DEFAULT_LAYER);
+    expect(state.overlays).toEqual([DEFAULT_LAYER]);
     expect(state.range).toBe(DEFAULT_RANGE);
     expect(state.tab).toBe("heatmap");
     expect(isViewMode("analysis")).toBe(true);
@@ -44,6 +46,7 @@ describe("app URL state", () => {
     expect(params.get("station")).toBeNull();
     expect(params.get("view")).toBe("map");
     expect(params.get("foo")).toBe("bar");
+    expect(params.get("overlays")).toBe("temperature");
     expect(params.get("lat")).toBeNull();
     expect(params.get("lon")).toBeNull();
   });
