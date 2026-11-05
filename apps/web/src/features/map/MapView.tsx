@@ -380,6 +380,41 @@ export function MapView({
           },
           firstSymbol,
         );
+        if (map.getStyle()?.glyphs) {
+          const labelFeatures = contours.features.map((feature) => {
+            const coordinates = feature.geometry.coordinates;
+            const middle = coordinates[Math.floor(coordinates.length / 2)] ?? coordinates[0];
+            return {
+              type: "Feature" as const,
+              properties: { level: feature.properties.level },
+              geometry: { type: "Point" as const, coordinates: middle },
+            };
+          });
+          map.addSource("field-isoline-labels", {
+            type: "geojson",
+            data: { type: "FeatureCollection", features: labelFeatures },
+          });
+          map.addLayer(
+            {
+              id: "field-isoline-labels",
+              type: "symbol",
+              source: "field-isoline-labels",
+              layout: {
+                "text-field": ["to-string", ["get", "level"]],
+                "text-font": ["Noto Sans Regular"],
+                "text-size": 9,
+                "text-allow-overlap": false,
+                "text-ignore-placement": false,
+              },
+              paint: {
+                "text-color": "#e9f4f2",
+                "text-halo-color": "#071318",
+                "text-halo-width": 1.1,
+              },
+            },
+            firstSymbol,
+          );
+        }
       }
     }
 
